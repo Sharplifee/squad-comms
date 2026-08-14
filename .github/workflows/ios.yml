@@ -106,6 +106,13 @@ jobs:
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath build/export
 
+      - name: Keep the signed IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SquadComms-ipa
+          path: build/export/*.ipa
+          retention-days: 30
+
       - name: Upload to TestFlight
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
