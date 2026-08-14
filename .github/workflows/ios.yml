@@ -29,11 +29,25 @@ jobs:
           APPLE_DIST_P12_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
         run: |
           echo "$APPLE_DIST_P12" | base64 --decode > /tmp/dist.p12
+
           security create-keychain -p runner build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
           security default-keychain -s build.keychain
+          security list-keychains -d user -s build.keychain login.keychain-db
           security unlock-keychain -p runner build.keychain
-          security import /tmp/dist.p12 -k build.keychain -P "$APPLE_DIST_P12_PASSWORD" -T /usr/bin/codesign
+
+          # The leaf certificate alone cannot chain to a trusted root on a
+          # fresh keychain, which surfaces as "certificate is invalid ... may
+          # have been revoked or expired". Import the WWDR intermediate first.
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/wwdr.cer
+          security import /tmp/wwdr.cer -k build.keychain -T /usr/bin/codesign || true
+
+          security import /tmp/dist.p12 -k build.keychain -P "$APPLE_DIST_P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k runner build.keychain
+
+          echo "--- identities visible to codesign ---"
+          security find-identity -v -p codesigning build.keychain
 
       - name: Install provisioning profile
         env:
