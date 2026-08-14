@@ -119,7 +119,7 @@ final class SessionManager: ObservableObject {
                   let member = members.first(where: { $0.id == id }) else { continue }
             let gain = member.isMutedByMe ? 0 : member.volume
             for publication in participant.audioTracks {
-                (publication.track as? RemoteAudioTrack)?.set(volume: gain)
+                (publication.track as? RemoteAudioTrack)?.volume = gain
             }
         }
     }
@@ -158,7 +158,8 @@ extension SessionManager: RoomDelegate {
         }
     }
 
-    nonisolated func room(_ room: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic topic: String) {
+    nonisolated func room(_ room: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic topic: String,
+                          encryptionType: EncryptionType) {
         Task { @MainActor in
             guard let participant,
                   let id = UUID(uuidString: participant.identity?.stringValue ?? ""),
