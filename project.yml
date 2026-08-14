@@ -36,17 +36,19 @@ targets:
         NSMicrophoneUsageDescription: squad comms uses your microphone so your squad hears you without touching your phone.
         NSSpeechRecognitionUsageDescription: Voice commands let you mute, unmute and rewind hands-free.
         NSBluetoothAlwaysUsageDescription: Used to detect which squad members are physically nearby.
-        BGTaskSchedulerPermittedIdentifiers: [com.connor.squadcomms.keepalive]
+        BGTaskSchedulerPermittedIdentifiers: [com.connor.openline.keepalive]
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.connor.squadcomms
+        PRODUCT_BUNDLE_IDENTIFIER: com.connor.openline
         DEVELOPMENT_TEAM: XF783932R2
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        PROVISIONING_PROFILE_SPECIFIER: SquadComms CI
+        CODE_SIGN_IDENTITY: Apple Distribution
     dependencies:
       - package: LiveKit
         product: LiveKit
