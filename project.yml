@@ -47,7 +47,7 @@ targets:
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
-        PROVISIONING_PROFILE_SPECIFIER: SquadComms CI
+        PROVISIONING_PROFILE_SPECIFIER: SquadComms CI 3
         CODE_SIGN_IDENTITY: Apple Distribution
     dependencies:
       - package: LiveKit
