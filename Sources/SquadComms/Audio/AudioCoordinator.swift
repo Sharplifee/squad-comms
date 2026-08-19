@@ -10,6 +10,9 @@ final class AudioCoordinator: ObservableObject {
     @Published private(set) var inputLevelDB: Float = -60
     @Published private(set) var micPermissionGranted = false
 
+    /// Set when the squad asks "who's on". The UI reads it and clears it.
+    @Published var rosterAnnouncement: String?
+
     private let vad = VADEngine()
     private let ducking = DuckingController()
     private let commands = CommandEngine()
@@ -39,8 +42,12 @@ final class AudioCoordinator: ObservableObject {
             .assign(to: \.inputLevelDB, on: self)
             .store(in: &cancellables)
 
-        commands.onCommand = { [weak self] command in
-            self?.handle(command)
+        commands.rosterProvider = { [weak self] in
+            self?.session?.members.map(\.displayName) ?? []
+        }
+
+        commands.onIntent = { [weak self] intent in
+            Task { @MainActor in self?.handle(intent) }
         }
     }
 
@@ -77,19 +84,37 @@ final class AudioCoordinator: ObservableObject {
     func pushToTalkDown() { vad.manualBegin() }
     func pushToTalkUp()   { vad.manualEnd() }
 
-    private func handle(_ command: CommandEngine.Command) {
-        switch command {
+    private func handle(_ intent: VoiceIntent) {
+        switch intent.action {
         case .muteAll:   session?.muteAll(true)
         case .unmuteAll: session?.muteAll(false)
-        case .muteMe:    session?.setSelfMuted(true)
-        case .unmuteMe:  session?.setSelfMuted(false)
+        case .mute:      session?.setSelfMuted(true)
+        case .unmute:    session?.setSelfMuted(false)
+        case .setVolume:
+            guard let volume = intent.volume, let session else { break }
+            // "set my volume to X" is about how loud the squad is in this
+            // listener's ears, so it applies to every remote track.
+            for member in session.members {
+                session.setVolume(volume, for: member)
+            }
+        case .whosOn:
+            let names = session?.members.map(\.displayName) ?? []
+            rosterAnnouncement = names.isEmpty
+                ? "Nobody else is on the line."
+                : names.joined(separator: ", ")
         case .rewind:
             let prefs = PreferencesStore.shared.current
             ducking.endDuck(behavior: .rewind, rewindSeconds: prefs.rewindSeconds)
         case .leave:
             Task { await session?.leave() }
+        case .unknown:
+            return
         }
-        Telemetry.event("voice_command", ["command": command.rawValue])
+        Telemetry.event("voice_command", [
+            "action": intent.action.rawValue,
+            "source": intent.source.rawValue,
+            "confidence": String(format: "%.2f", intent.confidence),
+        ])
     }
 
     private func requestMic() async -> Bool {
