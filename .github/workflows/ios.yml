@@ -96,7 +96,7 @@ jobs:
             <key>signingCertificate</key><string>Apple Distribution</string>
             <key>provisioningProfiles</key>
             <dict>
-              <key>com.connor.openline</key><string>SquadComms CI</string>
+              <key>com.connor.openline</key><string>SquadComms CI 3</string>
             </dict>
           </dict>
           </plist>
