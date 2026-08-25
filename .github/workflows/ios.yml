@@ -106,12 +106,18 @@ jobs:
             -exportOptionsPlist /tmp/ExportOptions.plist \
             -exportPath build/export
 
+      # Artifact storage quota must never block the TestFlight upload.
+      # Run 7 (2026-08-14) archived and exported a signed IPA successfully and
+      # then failed here on "Artifact storage quota has been hit", which stopped
+      # the upload step from ever running. Keeping the IPA is a convenience;
+      # shipping it is the point.
       - name: Keep the signed IPA
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: SquadComms-ipa
           path: build/export/*.ipa
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload to TestFlight
         env:
@@ -121,5 +127,7 @@ jobs:
         run: |
           mkdir -p ~/private_keys
           echo "$ASC_KEY_P8" | base64 --decode > ~/private_keys/AuthKey_$ASC_KEY_ID.p8
-          xcrun altool --upload-app -f build/export/SquadComms.ipa -t ios \
+          IPA=$(ls build/export/*.ipa | head -1)
+          echo "Uploading $IPA"
+          xcrun altool --upload-app -f "$IPA" -t ios \
             --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
