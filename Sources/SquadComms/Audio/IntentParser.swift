@@ -59,6 +59,14 @@ struct IntentParser {
         let confidence: Double
     }
 
+    /// The invoke body must be a single concrete Encodable type. A dictionary
+    /// literal mixing String and [String] infers [String: Any], which is not
+    /// Encodable — that is what broke the build on 2026-08-19.
+    private struct Request: Encodable {
+        let utterance: String
+        let roster: [String]
+    }
+
     /// Never throws. Any failure — not configured, offline, rate limited, bad
     /// response — degrades to the keyword table rather than dropping the command.
     func parse(_ utterance: String, roster: [String] = []) async -> VoiceIntent {
@@ -72,7 +80,7 @@ struct IntentParser {
         do {
             let payload: Payload = try await client.functions
                 .invoke("parse-command",
-                        options: .init(body: ["utterance": trimmed, "roster": roster]))
+                        options: .init(body: Request(utterance: trimmed, roster: roster)))
 
             guard payload.confidence >= Self.confidenceFloor, payload.action != .unknown else {
                 return fallback
