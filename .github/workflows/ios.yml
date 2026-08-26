@@ -11,11 +11,19 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
+
+      # Apple rejects uploads built with anything older than the iOS 26 SDK,
+      # so the runner must be macos-26 with Xcode 26 selected.
+      - name: Select Xcode 26
+        run: |
+          ls /Applications | grep -i '^Xcode' || true
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
