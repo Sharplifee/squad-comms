@@ -9,6 +9,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
+                    radarCard
                     statusCard
                     if !session.members.isEmpty {
                         MixerView()
@@ -37,6 +38,40 @@ struct HomeView: View {
         }
         .task { await audio.startListening() }
         .onDisappear { audio.stopListening() }
+    }
+
+    /// The radar is the hero. It answers the only question that matters when
+    /// you walk onto a gym floor: who is here, and how far away.
+    private var radarCard: some View {
+        VStack(spacing: 14) {
+            HStack {
+                Text("LIVE RADAR").stampLabel()
+                Spacer()
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(session.proximity.isScanning ? Theme.live : Theme.textFaint)
+                        .frame(width: 6, height: 6)
+                    Text(session.proximity.isScanning ? "SCANNING" : "BLUETOOTH OFF")
+                        .font(.system(size: 10, design: .monospaced))
+                        .tracking(1.0)
+                        .foregroundStyle(Theme.textFaint)
+                }
+            }
+
+            PlateRadarView(
+                contacts: session.proximity.contacts,
+                names: Dictionary(uniqueKeysWithValues: session.members.map { ($0.id, $0.displayName) }),
+                speakingID: session.members.first(where: { $0.isSpeaking })?.id,
+                isScanning: session.proximity.isScanning
+            )
+            .frame(maxWidth: 300)
+
+            RangeLoaderView(index: Binding(
+                get: { session.proximity.rangeIndex },
+                set: { session.proximity.rangeIndex = $0 }
+            ))
+        }
+        .card()
     }
 
     private var statusCard: some View {

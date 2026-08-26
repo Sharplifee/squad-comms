@@ -10,7 +10,13 @@ final class VADEngine: ObservableObject {
     @Published private(set) var state: State = .silence
     @Published private(set) var inputLevelDB: Float = -60
 
-    private let engine = AVAudioEngine()
+    /// The command engine needs the same buffers this tap already produces.
+    /// Two taps on one input node is a crash, so VAD owns the engine and
+    /// forwards buffers on rather than letting anyone install a second tap.
+    let engine = AVAudioEngine()
+
+    /// Set by AudioCoordinator to feed speech recognition.
+    var onBuffer: ((AVAudioPCMBuffer) -> Void)?
     private var lastSpeechAt: Date = .distantPast
     private var prefs: Preferences { PreferencesStore.shared.current }
 
@@ -23,7 +29,9 @@ final class VADEngine: ObservableObject {
 
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.process(buffer)
+            guard let self else { return }
+            self.process(buffer)
+            self.onBuffer?(buffer)
         }
 
         engine.prepare()

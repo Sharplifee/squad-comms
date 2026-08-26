@@ -1,42 +1,149 @@
 import CoreBluetooth
 import Foundation
+import Combine
 
-/// CoreBluetooth RSSI as a "who is physically near me" signal.
-/// Not used for transport — audio always goes over WiFi/LTE through LiveKit.
-/// This only surfaces a nearby badge so you know who is actually in the room.
-final class ProximityEngine: NSObject {
+/// Who is physically near you, from CoreBluetooth RSSI.
+///
+/// Audio never travels over Bluetooth — it goes over WiFi/LTE through LiveKit.
+/// BLE is only used to answer "how far away is this person right now", which is
+/// what the radar draws. RSSI is converted to metres with the log-distance path
+/// loss model; it is noisy by nature, so every reading is smoothed before it
+/// reaches the UI or the dots jitter constantly.
+final class ProximityEngine: NSObject, ObservableObject {
+
+    struct Contact: Identifiable, Equatable {
+        let id: UUID
+        var rssi: Int
+        var metres: Double
+        var lastSeen: Date
+        /// 0...1 against the currently selected range.
+        var normalised: Double = 0
+    }
+
+    @Published private(set) var contacts: [Contact] = []
+    @Published private(set) var isScanning = false
+
+    /// Nine logarithmic stops. Hyper-local matters most — 100 ft is the gym
+    /// floor, and that is the case this app exists for.
+    static let rangeLabels  = ["100 FT", "250 FT", "500 FT", "0.25 MI", "1 MI",
+                               "5 MI", "25 MI", "100 MI", "ANYWHERE"]
+    static let rangeMetres: [Double] = [30.5, 76.2, 152.4, 402.3, 1609.3,
+                                        8046.7, 40233.6, 160934.4, 9_999_999]
+
+    @Published var rangeIndex: Int = 1 {
+        didSet { renormalise() }
+    }
 
     var onNearbyChanged: ((Set<UUID>) -> Void)?
 
     private var central: CBCentralManager?
     private var peripheral: CBPeripheralManager?
-    private var nearby: Set<UUID> = []
     private var squadID: UUID?
+    private var smoothed: [UUID: Double] = [:]
+    private var pruneTimer: Timer?
 
     private static let serviceUUID = CBUUID(string: "9F2A1C34-6B70-4E1D-9C2F-5A8E3D71B0C4")
     private static let nearThresholdRSSI = -65
+    private static let txPowerAt1m = -59.0
+    private static let staleAfter: TimeInterval = 12
+    private static let smoothing = 0.25
+
+    // MARK: - Lifecycle
 
     func start(squadID: UUID) {
         self.squadID = squadID
         central = CBCentralManager(delegate: self, queue: .global(qos: .utility))
         peripheral = CBPeripheralManager(delegate: self, queue: .global(qos: .utility))
+        pruneTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            self?.prune()
+        }
     }
 
     func stop() {
+        pruneTimer?.invalidate(); pruneTimer = nil
         central?.stopScan()
         peripheral?.stopAdvertising()
         central = nil
         peripheral = nil
-        nearby = []
-        onNearbyChanged?(nearby)
+        smoothed = [:]
+        Task { @MainActor in
+            self.contacts = []
+            self.isScanning = false
+            self.onNearbyChanged?([])
+        }
+    }
+
+    // MARK: - Distance
+
+    /// Log-distance path loss. Rough, but the right shape: every 6 dB lost is
+    /// roughly double the distance.
+    static func metres(fromRSSI rssi: Int) -> Double {
+        pow(10, (txPowerAt1m - Double(rssi)) / 20.0)
+    }
+
+    private func renormalise() {
+        let limit = Self.rangeMetres[rangeIndex]
+        let updated = contacts.map { c -> Contact in
+            var c = c
+            c.normalised = min(c.metres / limit, 1.0)
+            return c
+        }
+        Task { @MainActor in self.contacts = updated }
+    }
+
+    private func prune() {
+        let cutoff = Date().addingTimeInterval(-Self.staleAfter)
+        let kept = contacts.filter { $0.lastSeen > cutoff }
+        guard kept.count != contacts.count else { return }
+        Task { @MainActor in
+            self.contacts = kept
+            self.onNearbyChanged?(Set(kept.map(\.id)))
+        }
+    }
+
+    private func ingest(id: UUID, rssi: Int) {
+        // Exponential smoothing on RSSI, not on distance — the conversion is
+        // exponential, so smoothing after it over-weights close readings.
+        let prior = smoothed[id] ?? Double(rssi)
+        let value = prior + (Double(rssi) - prior) * Self.smoothing
+        smoothed[id] = value
+
+        let m = Self.metres(fromRSSI: Int(value.rounded()))
+        let limit = Self.rangeMetres[rangeIndex]
+
+        var next = contacts
+        if let i = next.firstIndex(where: { $0.id == id }) {
+            next[i].rssi = Int(value.rounded())
+            next[i].metres = m
+            next[i].lastSeen = Date()
+            next[i].normalised = min(m / limit, 1.0)
+        } else {
+            next.append(Contact(id: id, rssi: Int(value.rounded()), metres: m,
+                                lastSeen: Date(), normalised: min(m / limit, 1.0)))
+        }
+        next.sort { $0.metres < $1.metres }
+
+        let ids = Set(next.map(\.id))
+        Task { @MainActor in
+            self.contacts = next
+            self.onNearbyChanged?(ids)
+        }
     }
 }
 
+// MARK: - Central
+
 extension ProximityEngine: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ manager: CBCentralManager) {
-        guard manager.state == .poweredOn else { return }
+        guard manager.state == .poweredOn else {
+            Task { @MainActor in self.isScanning = false }
+            return
+        }
+        // Duplicates ON — we need a continuous RSSI stream to smooth, not a
+        // single discovery event. This is the whole reason the radar can move.
         manager.scanForPeripherals(withServices: [Self.serviceUUID],
-                                   options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+                                   options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+        Task { @MainActor in self.isScanning = true }
     }
 
     func centralManager(_ manager: CBCentralManager,
@@ -45,12 +152,12 @@ extension ProximityEngine: CBCentralManagerDelegate {
                         rssi RSSI: NSNumber) {
         guard let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String,
               let id = UUID(uuidString: name) else { return }
-
-        let isNear = RSSI.intValue > Self.nearThresholdRSSI
-        let changed = isNear ? nearby.insert(id).inserted : (nearby.remove(id) != nil)
-        if changed { onNearbyChanged?(nearby) }
+        guard RSSI.intValue != 127 else { return }   // 127 = unreadable
+        ingest(id: id, rssi: RSSI.intValue)
     }
 }
+
+// MARK: - Peripheral
 
 extension ProximityEngine: CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ manager: CBPeripheralManager) {

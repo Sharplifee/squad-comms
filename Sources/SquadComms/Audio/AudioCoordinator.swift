@@ -67,10 +67,23 @@ final class AudioCoordinator: ObservableObject {
     func startListening() async {
         micPermissionGranted = await requestMic()
         guard micPermissionGranted else { return }
-        commands.requestAuthorization { _ in }
         do {
             try ducking.configureForAmbientVoice()
+            // Buffers must be forwarded BEFORE the engine starts, or the first
+            // utterance after launch is dropped.
+            vad.onBuffer = { [weak self] buffer in
+                self?.commands.append(buffer)
+            }
             try vad.start()
+
+            // Voice commands were previously never started and never fed —
+            // CommandEngine.start(on:) had no caller and the recognition
+            // request received no audio, so every spoken command was silently
+            // dead. Start it on the engine VAD already owns.
+            commands.requestAuthorization { [weak self] granted in
+                guard granted, let self else { return }
+                self.commands.start(on: self.vad.engine)
+            }
         } catch {
             Telemetry.event("audio_start_failed", ["error": error.localizedDescription])
         }

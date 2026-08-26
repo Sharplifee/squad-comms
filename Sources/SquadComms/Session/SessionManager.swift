@@ -17,11 +17,20 @@ final class SessionManager: ObservableObject {
 
     private let room = Room()
     private let backend = Backend()
-    private let proximity = ProximityEngine()
+    /// Exposed so the radar can read live distances and drive the range control.
+    let proximity = ProximityEngine()
+    private var proximityCancellable: AnyCancellable?
     private var speakingRemotes = Set<UUID>()
 
     init() {
         room.add(delegate: self)
+        // ProximityEngine publishes its own contact list. SessionManager is
+        // what the view observes, so its objectWillChange must fire too or the
+        // radar renders once and then freezes.
+        proximityCancellable = proximity.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+
         proximity.onNearbyChanged = { [weak self] ids in
             guard let self else { return }
             for index in self.members.indices {
