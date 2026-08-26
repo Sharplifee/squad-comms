@@ -137,5 +137,18 @@ jobs:
           echo "$ASC_KEY_P8" | base64 --decode > ~/private_keys/AuthKey_$ASC_KEY_ID.p8
           IPA=$(ls build/export/*.ipa | head -1)
           echo "Uploading $IPA"
-          xcrun altool --upload-app -f "$IPA" -t ios \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          # Apple returns a 409 on the 'buildUpload' relationship when a prior
+          # delivery for the same build slot is still holding a lock. It clears
+          # on its own within a minute or two, so retry rather than fail the
+          # whole run over a transient server-side lock.
+          for attempt in 1 2 3; do
+            if xcrun altool --upload-app -f "$IPA" -t ios \
+                 --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"; then
+              echo "Upload succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "Upload attempt $attempt failed; waiting before retry"
+            sleep $((attempt * 45))
+          done
+          echo "All upload attempts failed"
+          exit 1
