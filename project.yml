@@ -32,10 +32,15 @@ targets:
       properties:
         CFBundleDisplayName: squad comms
         CFBundleShortVersionString: "1.0"
-        CFBundleVersion: "1"
+        CFBundleVersion: "2"
         UILaunchScreen: {}
         UIBackgroundModes: [audio, voip, processing]
         NSMicrophoneUsageDescription: squad comms uses your microphone so your squad hears you without touching your phone.
+        # LiveKit links the camera capture APIs even though this app is audio
+        # only and never opens a camera. Apple scans the binary, not the code
+        # path, so the purpose string is required or upload fails ITMS-90683.
+        NSCameraUsageDescription: squad comms does not use the camera. Its audio library links Apple's camera APIs, so this permission is never requested.
+        NSLocalNetworkUsageDescription: squad comms connects directly to your squad members' devices on the same network for low-latency audio.
         NSSpeechRecognitionUsageDescription: Voice commands let you mute, unmute and rewind hands-free.
         NSBluetoothAlwaysUsageDescription: Used to detect which squad members are physically nearby.
         BGTaskSchedulerPermittedIdentifiers: [com.connor.openline.keepalive]
