@@ -77,6 +77,36 @@ final class SessionManager: ObservableObject {
 
     func reset() { state = .idle }
 
+    /// Open the line without asking anything.
+    ///
+    /// A code screen on an always-on audio app is a contradiction: it puts a
+    /// lock in front of the one thing the app promises. So on launch we
+    /// rejoin the last squad silently, and if there has never been one we
+    /// create it rather than presenting an empty six-digit field to someone
+    /// who has nothing to type into it. The code still exists — it is how you
+    /// bring somebody else in — it just is not a gate any more.
+    func openLine() async {
+        guard case .idle = state else { return }
+
+        if let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode"), !code.isEmpty {
+            await join(code: code)
+            // A stale or deleted squad must not strand you on a failure screen
+            // at launch. Fall through and make a fresh one instead.
+            if case .failed = state {
+                state = .idle
+                await create(name: defaultSquadName)
+            }
+            return
+        }
+
+        await create(name: defaultSquadName)
+    }
+
+    private var defaultSquadName: String {
+        let me = PreferencesStore.shared.current.displayName
+        return me.isEmpty ? "My squad" : "\(me)'s squad"
+    }
+
     private func connect(to squad: Squad) async throws {
         let token = try await backend.token(for: squad.id,
                                             displayName: PreferencesStore.shared.current.displayName)

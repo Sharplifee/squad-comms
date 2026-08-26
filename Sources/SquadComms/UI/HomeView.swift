@@ -4,6 +4,7 @@ struct HomeView: View {
     @EnvironmentObject private var session: SessionManager
     @EnvironmentObject private var audio: AudioCoordinator
     @State private var showSettings = false
+    @State private var showJoin = false
 
     var body: some View {
         NavigationStack {
@@ -35,6 +36,7 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showJoin) { SwitchSquadSheet() }
         }
         .task { await audio.startListening() }
         .onDisappear { audio.stopListening() }
@@ -100,19 +102,35 @@ struct HomeView: View {
         .card()
     }
 
+    /// You are always in a squad, so "empty" means nobody has joined yours yet.
+    /// This is where the code lives now — as something you hand out, and a way
+    /// to move over to someone else's line if they already have one going.
     private var emptySquad: some View {
-        VStack(spacing: 10) {
-            Text("Nobody else is on yet")
+        VStack(spacing: 12) {
+            Text("You're the only one on")
                 .font(.headline)
-            Text("Share your code and they'll drop straight in.")
+                .foregroundStyle(Theme.text)
+            Text("Send your code and they drop straight in — no setup on their end.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textDim)
+                .multilineTextAlignment(.center)
+
             if let code = session.squad?.joinCode {
+                Text(code)
+                    .font(.system(size: 30, weight: .semibold, design: .monospaced))
+                    .tracking(6)
+                    .foregroundStyle(Theme.text)
+                    .padding(.top, 2)
+
                 ShareLink(item: "Join my squad on squad comms — code \(code)") {
-                    Text("Share the code").font(.subheadline.weight(.medium))
+                    Text("Share code").font(.subheadline.weight(.medium))
                 }
-                .padding(.top, 4)
             }
+
+            Button("Join someone else's") { showJoin = true }
+                .font(.footnote)
+                .foregroundStyle(Theme.textFaint)
+                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
         .card()
@@ -154,5 +172,48 @@ struct LevelMeter: View {
             }
         }
         .frame(height: 6)
+    }
+}
+
+/// Entering a code is now an explicit choice made from inside a working app,
+/// not the price of admission.
+struct SwitchSquadSheet: View {
+    @EnvironmentObject private var session: SessionManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var code = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Text("Join someone else's squad")
+                .font(.headline)
+                .foregroundStyle(Theme.text)
+            Text("You'll leave your own line to do it.")
+                .font(.footnote)
+                .foregroundStyle(Theme.textDim)
+
+            TextField("000000", text: $code)
+                .textFieldStyle(.plain)
+                .keyboardType(.numberPad)
+                .font(.system(size: 36, weight: .semibold, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .focused($focused)
+                .onChange(of: code) { _, new in
+                    code = String(new.filter(\.isNumber).prefix(6))
+                    if code.count == 6 {
+                        Task {
+                            await session.join(code: code)
+                            dismiss()
+                        }
+                    }
+                }
+                .padding(.vertical, 10)
+
+            Spacer()
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background)
+        .onAppear { focused = true }
     }
 }
