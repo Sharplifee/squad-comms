@@ -157,5 +157,5 @@ jobs:
           fi
           echo "altool exited $UPLOAD_STATUS - verifying against App Store Connect"
           BUILD=$(python3 -c "import re;print(re.search(r'CFBundleVersion: .(\d+).', open('project.yml').read()).group(1))")
-          pip3 install --quiet pyjwt cryptography
+          pip3 install --quiet --break-system-packages pyjwt cryptography
           python3 scripts/verify_upload.py 6805307212 "$BUILD"
