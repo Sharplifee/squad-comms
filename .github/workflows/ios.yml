@@ -64,7 +64,7 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$APPLE_PROVISION_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/squadcomms.mobileprovision
 
-      - name: Write build configuration
+      - name: Generate project and write build configuration
         env:
           LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -72,12 +72,30 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
         run: |
-          /usr/libexec/PlistBuddy -c "Add :LIVEKIT_URL string $LIVEKIT_URL" Sources/SquadComms/Support/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Add :SUPABASE_URL string $SUPABASE_URL" Sources/SquadComms/Support/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Add :SUPABASE_ANON_KEY string $SUPABASE_ANON_KEY" Sources/SquadComms/Support/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Add :SENTRY_DSN string $SENTRY_DSN" Sources/SquadComms/Support/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Add :POSTHOG_API_KEY string $POSTHOG_API_KEY" Sources/SquadComms/Support/Info.plist || true
+          # XcodeGen regenerates Info.plist from project.yml, so it MUST run
+          # BEFORE we inject runtime config. The old order injected first then
+          # generated, which wiped every key and shipped the app "not
+          # configured" — that was the Opening-the-line / Couldn't-connect bug.
           xcodegen generate
+          PLIST=Sources/SquadComms/Support/Info.plist
+          setkey() {
+            /usr/libexec/PlistBuddy -c "Set :$1 $2" "$PLIST" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$PLIST"
+          }
+          setkey LIVEKIT_URL "$LIVEKIT_URL"
+          setkey SUPABASE_URL "$SUPABASE_URL"
+          setkey SUPABASE_ANON_KEY "$SUPABASE_ANON_KEY"
+          setkey SENTRY_DSN "$SENTRY_DSN"
+          setkey POSTHOG_API_KEY "$POSTHOG_API_KEY"
+          BUILD=$((GITHUB_RUN_NUMBER + 100))
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$PLIST"
+          echo "BUILD_NUMBER=$BUILD" >> "$GITHUB_ENV"
+          echo "--- config keys in Info.plist (masked) ---"
+          for k in LIVEKIT_URL SUPABASE_URL SUPABASE_ANON_KEY; do
+            v=$(/usr/libexec/PlistBuddy -c "Print :$k" "$PLIST" 2>/dev/null)
+            if [ -n "$v" ]; then echo "$k = ${v:0:18}... (len ${#v})"; else echo "$k = MISSING"; exit 1; fi
+          done
+          echo "CFBundleVersion = $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")"
 
       - name: Archive
         run: |
@@ -156,6 +174,5 @@ jobs:
             exit 0
           fi
           echo "altool exited $UPLOAD_STATUS - verifying against App Store Connect"
-          BUILD=$(python3 -c "import re;print(re.search(r'CFBundleVersion: .(\d+).', open('project.yml').read()).group(1))")
           pip3 install --quiet --break-system-packages pyjwt cryptography
-          python3 scripts/verify_upload.py 6805307212 "$BUILD"
+          python3 scripts/verify_upload.py 6805307212 "$BUILD_NUMBER"
