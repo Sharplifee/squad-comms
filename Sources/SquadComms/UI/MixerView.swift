@@ -37,6 +37,10 @@ struct MixerView: View {
 struct MemberRow: View {
     let member: Member
     @EnvironmentObject private var session: SessionManager
+    @State private var holding = false
+
+    private var isPrivate: Bool { session.privateLineTo?.id == member.id }
+    private var theyOpenedPrivate: Bool { session.privateLineFrom?.id == member.id }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -45,10 +49,18 @@ struct MemberRow: View {
                     .fill(member.isSpeaking && !member.isMutedByMe ? Theme.live : Theme.hairline)
                     .frame(width: 8, height: 8)
 
-                Text(member.displayName)
-                    .font(.body.weight(.medium))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(member.displayName)
+                        .font(.body.weight(.medium))
+                    if isPrivate || theyOpenedPrivate {
+                        Text(isPrivate ? "DIRECT LINE — HOLDING" : "DIRECT LINE TO YOU")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .tracking(0.7)
+                            .foregroundStyle(Theme.warning)
+                    }
+                }
 
-                if member.nearby {
+                if member.nearby && !isPrivate && !theyOpenedPrivate {
                     Text("nearby")
                         .font(.caption2.weight(.medium))
                         .padding(.horizontal, 6).padding(.vertical, 2)
@@ -66,6 +78,17 @@ struct MemberRow: View {
                 }
                 .buttonStyle(.plain)
             }
+            // Hold a name to talk to that person only. A hold rather than a
+            // toggle on purpose: a private channel you can forget you left
+            // open is how you say something to one person while believing the
+            // whole squad can hear it.
+            .contentShape(Rectangle())
+            .onLongPressGesture(minimumDuration: 0.28, maximumDistance: 30) {
+            } onPressingChanged: { pressing in
+                holding = pressing
+                if pressing { session.beginPrivateLine(to: member) }
+                else        { session.endPrivateLine() }
+            }
 
             HStack(spacing: 10) {
                 Image(systemName: "speaker.fill").font(.caption2).foregroundStyle(.tertiary)
@@ -82,5 +105,14 @@ struct MemberRow: View {
             }
             .opacity(member.isMutedByMe ? 0.35 : 1)
         }
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isPrivate || theyOpenedPrivate ? Theme.warning.opacity(0.12) : .clear)
+        )
+        .scaleEffect(holding ? 0.985 : 1)
+        .animation(.easeOut(duration: 0.12), value: holding)
+        .animation(.easeInOut(duration: 0.18), value: isPrivate)
+        .animation(.easeInOut(duration: 0.18), value: theyOpenedPrivate)
     }
 }

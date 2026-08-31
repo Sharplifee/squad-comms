@@ -14,7 +14,6 @@ struct HomeView: View {
                         PrivateLineBanner(name: from.displayName)
                     }
                     radarCard
-                    SquadMixerView()
                     statusCard
                     if !session.members.isEmpty {
                         MixerView()
