@@ -94,12 +94,26 @@ final class SessionManager: ObservableObject {
             // at launch. Fall through and make a fresh one instead.
             if case .failed = state {
                 state = .idle
-                await create(name: defaultSquadName)
+                await createWithRetry()
             }
             return
         }
 
-        await create(name: defaultSquadName)
+        await createWithRetry()
+    }
+
+    /// Transient backend trouble at launch must not end in a dead-end screen.
+    /// The app's whole promise is that it is already on when you open it, so a
+    /// single failed request retries quietly before anything is shown.
+    private func createWithRetry() async {
+        for delay in [0.0, 1.5, 4.0] {
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                state = .idle
+            }
+            await create(name: defaultSquadName)
+            if case .connected = state { return }
+        }
     }
 
     private var defaultSquadName: String {

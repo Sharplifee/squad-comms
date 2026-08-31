@@ -24,9 +24,11 @@ struct Backend {
     func createSquad(name: String) async throws -> Squad {
         guard let client else { throw BackendError.notConfigured }
         let code = String(format: "%06d", Int.random(in: 0...999_999))
-        let squad = Squad(id: UUID(), name: name, joinCode: code, createdAt: Date())
-        try await client.from("squads").insert(squad).execute()
-        return squad
+        let id = UUID()
+        try await client.from("squads")
+            .insert(SquadInsert(id: id, name: name, joinCode: code))
+            .execute()
+        return Squad(id: id, name: name, joinCode: code, createdAt: Date())
     }
 
     func squad(forCode code: String) async throws -> Squad {

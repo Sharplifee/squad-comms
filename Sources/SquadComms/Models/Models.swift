@@ -1,10 +1,37 @@
 import Foundation
 
+/// Postgres columns are snake_case. Without these CodingKeys the Swift
+/// property names go over the wire verbatim and PostgREST rejects the request
+/// with "Could not find the 'createdAt' column of 'squads' in the schema
+/// cache" — which is exactly what stranded the app on a "Couldn't connect"
+/// screen. Any new property here needs a key or it will fail the same way.
 struct Squad: Codable, Identifiable, Hashable {
     let id: UUID
     var name: String
-    var joinCode: String          // 6 digits
-    var createdAt: Date
+    var joinCode: String              // 6 digits
+    var createdAt: Date?              // set by the database, never by the app
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case joinCode  = "join_code"
+        case createdAt = "created_at"
+    }
+}
+
+/// Insert payload. Deliberately omits created_at: the column defaults to now()
+/// server-side, and Swift's default Date encoding is a numeric interval rather
+/// than a timestamp, which Postgres would reject even with the key mapped.
+struct SquadInsert: Encodable {
+    let id: UUID
+    let name: String
+    let joinCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case joinCode = "join_code"
+    }
 }
 
 struct Member: Codable, Identifiable, Hashable {

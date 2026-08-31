@@ -56,8 +56,17 @@ struct FailureView: View {
             Text("Couldn't connect").font(.title2.weight(.semibold))
             Text(message)
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("Try again") { session.reset() }.buttonStyle(PrimaryButton())
-                .frame(maxWidth: 220)
+            // reset() alone only returned to .idle and left the user staring
+            // at a spinner, because nothing re-drove openLine(). Retry has to
+            // actually retry.
+            Button("Try again") {
+                Task {
+                    session.reset()
+                    await session.openLine()
+                }
+            }
+            .buttonStyle(PrimaryButton())
+            .frame(maxWidth: 220)
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
