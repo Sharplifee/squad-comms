@@ -74,6 +74,12 @@ final class ProximityEngine: NSObject, ObservableObject {
         }
     }
 
+    /// Ghost mode: stop broadcasting our own identity while continuing to scan.
+    /// You still see everyone; nobody sees you. Audio is untouched.
+    func stopAdvertising() {
+        peripheral?.stopAdvertising()
+    }
+
     func stop() {
         pruneTimer?.invalidate(); pruneTimer = nil
         central?.stopScan()

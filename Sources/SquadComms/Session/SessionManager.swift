@@ -194,6 +194,18 @@ final class SessionManager: ObservableObject {
     /// Re-apply preference-driven audio values after the Audio tab changes
     /// them. Without this the sliders move and nothing happens until the next
     /// reconnect.
+    /// Ghost mode stops us advertising over Bluetooth, so nobody sees us on
+    /// their radar. It does not affect audio — you can still be heard, which is
+    /// the distinction people expect and the reason it is not called "hide".
+    func applyPresence() {
+        let prefs = PreferencesStore.shared.current
+        if prefs.ghostMode {
+            proximity.stopAdvertising()
+        } else if let squad, let me = UUID(uuidString: room.localParticipant.identity?.stringValue ?? "") {
+            proximity.start(squadID: squad.id, selfID: me)
+        }
+    }
+
     func applyPreferences() {
         let prefs = PreferencesStore.shared.current
         for index in members.indices where !members[index].isMutedByMe {
