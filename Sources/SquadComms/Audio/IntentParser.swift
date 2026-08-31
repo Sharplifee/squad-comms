@@ -75,7 +75,10 @@ struct IntentParser {
 
         let fallback = Self.keywordIntent(for: trimmed)
 
-        guard let client else { return fallback }
+        guard let client else {
+            Log.commands.error("IntentParser: Supabase not configured — keyword fallback only (action \(fallback.action.rawValue, privacy: .public))")
+            return fallback
+        }
 
         do {
             let payload: Payload = try await client.functions
@@ -83,6 +86,7 @@ struct IntentParser {
                         options: .init(body: Request(utterance: trimmed, roster: roster)))
 
             guard payload.confidence >= Self.confidenceFloor, payload.action != .unknown else {
+                Log.commands.info("model returned \(payload.action.rawValue, privacy: .public) @ \(payload.confidence, privacy: .public) — below floor \(Self.confidenceFloor, privacy: .public) or unknown, using keyword fallback")
                 return fallback
             }
 
@@ -92,19 +96,28 @@ struct IntentParser {
                                confidence: payload.confidence,
                                source: .model)
         } catch {
+            // parse-command answered 401 to every request the app ever made:
+            // the function called supabase.auth.getUser() and rejected when
+            // there was no user, but squad comms has no sign-in, so there was
+            // never going to be one. Log loudly — a silent collapse to the
+            // keyword table is exactly what hid this for six releases.
+            Log.commands.error("parse-command FAILED: \(error.localizedDescription, privacy: .public) — falling back to keyword (action \(fallback.action.rawValue, privacy: .public))")
             Telemetry.event("intent_parse_fallback", ["error": error.localizedDescription])
             return fallback
         }
     }
 
-    /// The original keyword table, kept verbatim as the fallback path.
+    /// The keyword table as the fallback path. Shares `CommandEngine.match` so
+    /// the two tables cannot drift, and so this path also gets the longest-first
+    /// ordering fix — iterating `allCases` in declaration order resolved
+    /// "unmute all" to `muteAll`, because "unmute all" has "mute all" as a suffix.
+    /// This runs on a completed utterance, so bare words are in scope.
     static func keywordIntent(for text: String) -> VoiceIntent {
-        let lowered = text.lowercased()
-        for command in CommandEngine.Command.allCases where lowered.hasSuffix(command.rawValue) {
-            return VoiceIntent(action: command.action, volume: nil, target: nil,
-                               confidence: 1, source: .keyword)
+        guard let command = CommandEngine.match(text.lowercased(), isFinal: true) else {
+            return .unknown
         }
-        return .unknown
+        return VoiceIntent(action: command.action, volume: nil, target: nil,
+                           confidence: 1, source: .keyword)
     }
 }
 

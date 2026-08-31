@@ -65,8 +65,13 @@ final class AudioCoordinator: ObservableObject {
     }
 
     func startListening() async {
+        Log.audio.info("startListening: requesting mic permission")
         micPermissionGranted = await requestMic()
-        guard micPermissionGranted else { return }
+        Log.audio.info("mic permission granted=\(self.micPermissionGranted, privacy: .public)")
+        guard micPermissionGranted else {
+            Log.audio.error("startListening aborted: microphone denied — no VAD, no commands, no transmission")
+            return
+        }
         do {
             try ducking.configureForAmbientVoice()
             // Buffers must be forwarded BEFORE the engine starts, or the first
@@ -81,15 +86,21 @@ final class AudioCoordinator: ObservableObject {
             // request received no audio, so every spoken command was silently
             // dead. Start it on the engine VAD already owns.
             commands.requestAuthorization { [weak self] granted in
-                guard granted, let self else { return }
+                guard let self else { return }
+                guard granted else {
+                    Log.commands.error("speech recognition NOT authorized — voice commands are off for this install")
+                    return
+                }
                 self.commands.start(on: self.vad.engine)
             }
         } catch {
+            Log.audio.error("audio start FAILED: \(error.localizedDescription, privacy: .public)")
             Telemetry.event("audio_start_failed", ["error": error.localizedDescription])
         }
     }
 
     func stopListening() {
+        Log.audio.info("stopListening")
         vad.stop()
         commands.stop()
     }
@@ -98,6 +109,7 @@ final class AudioCoordinator: ObservableObject {
     func pushToTalkUp()   { vad.manualEnd() }
 
     private func handle(_ intent: VoiceIntent) {
+        Log.commands.info("DISPATCH action=\(intent.action.rawValue, privacy: .public) source=\(intent.source.rawValue, privacy: .public) volume=\(intent.volume ?? -1, privacy: .public) members=\(self.session?.members.count ?? 0, privacy: .public)")
         switch intent.action {
         case .muteAll:   session?.muteAll(true)
         case .unmuteAll: session?.muteAll(false)
@@ -149,13 +161,28 @@ final class AudioCoordinator: ObservableObject {
             Task { @MainActor in
                 switch type {
                 case .began:
+                    Log.audio.info("interruption BEGAN — yielding audio")
                     self.session?.setMicrophone(enabled: false)
                     self.session?.broadcast(.speechEnd)
+                    // Stop commands too. Cancelling the recognition task is the
+                    // only way to release its hold on the input; leaving it
+                    // running across an interruption is what made every
+                    // restart-after-a-phone-call silently fail.
+                    self.commands.stop()
                     self.vad.stop()
                     self.ducking.yieldForInterruption()
                 case .ended:
+                    Log.audio.info("interruption ENDED — restarting VAD and commands")
                     self.ducking.resumeAfterInterruption()
-                    try? self.vad.start()
+                    do {
+                        try self.vad.start()
+                        // Previously only VAD came back. CommandEngine was
+                        // never restarted, so voice commands were dead after
+                        // any phone call until the app was relaunched.
+                        self.commands.start(on: self.vad.engine)
+                    } catch {
+                        Log.audio.error("VAD restart after interruption FAILED: \(error.localizedDescription, privacy: .public)")
+                    }
                 @unknown default:
                     break
                 }

@@ -4,16 +4,35 @@
 // on device — the iPhone only ever sends already-transcribed text (Speech
 // framework transcribes on-device) and receives JSON back.
 //
-// Deploy:  supabase functions deploy parse-command
+// squad comms is anonymous and code-based: there is no user sign-in, exactly as
+// mint-livekit-token documents. This function used to call auth.getUser() and
+// return 401 when there was no user — which was every single request, because a
+// user could never exist. It was also deployed with verify_jwt: true, so the
+// gateway rejected the anon key before the handler even ran. Verified against
+// the live project on 2026-08-31: every call returned HTTP 401, so the model
+// intent path had never once succeeded and every command silently degraded to
+// the client's keyword table.
+//
+// Deploy:  supabase functions deploy parse-command --no-verify-jwt
 // Secrets: supabase secrets set OPENROUTER_API_KEY=...
 //
 // Contract: { utterance: string, roster?: string[] }
 //        -> { action, volume, target, confidence }
 // Any failure returns a non-2xx so the client falls back to its keyword table.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 const MODEL = "anthropic/claude-sonnet-4.5";
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
 
 const ACTIONS = [
   "mute",
@@ -70,31 +89,19 @@ const SCHEMA = {
 };
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return new Response("Unauthorized", { status: 401 });
-
     const { utterance, roster } = await req.json();
     if (typeof utterance !== "string" || utterance.trim().length === 0) {
-      return new Response("utterance required", { status: 400 });
+      return new Response("utterance required", { status: 400, headers: cors });
     }
     // Long input is conversation, not a command. Don't pay for it.
     if (utterance.length > 300) {
-      return new Response(
-        JSON.stringify({ action: "unknown", volume: null, target: null, confidence: 0 }),
-        { headers: { "Content-Type": "application/json" } },
-      );
+      return json({ action: "unknown", volume: null, target: null, confidence: 0 });
     }
 
     const key = Deno.env.get("OPENROUTER_API_KEY");
-    if (!key) return new Response("model credential missing", { status: 503 });
+    if (!key) return new Response("model credential missing", { status: 503, headers: cors });
 
     const names = Array.isArray(roster) ? roster.filter((n) => typeof n === "string") : [];
     const context = names.length
@@ -110,7 +117,11 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 200,
+        // The response is four short JSON fields — about 30 tokens. 200 was
+        // pure headroom, and OpenRouter reserves the full max_tokens against
+        // the account balance up front, so it turned a low balance into a hard
+        // 402 on every request. 64 is still ~2x what the schema can emit.
+        max_tokens: 64,
         temperature: 0,
         messages: [
           { role: "system", content: SYSTEM + context },
@@ -126,21 +137,19 @@ Deno.serve(async (req) => {
     if (!upstream.ok) {
       const detail = await upstream.text();
       // 429 and 5xx are both "fall back to keywords", not "fail the command".
-      return new Response(
-        JSON.stringify({ error: "model_unavailable", status: upstream.status, detail }),
-        { status: upstream.status === 429 ? 429 : 503, headers: { "Content-Type": "application/json" } },
-      );
+      return json({ error: "model_unavailable", status: upstream.status, detail },
+        upstream.status === 429 ? 429 : 503);
     }
 
     const payload = await upstream.json();
     const raw = payload?.choices?.[0]?.message?.content;
-    if (typeof raw !== "string") return new Response("empty model response", { status: 503 });
+    if (typeof raw !== "string") return new Response("empty model response", { status: 503, headers: cors });
 
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch {
-      return new Response("unparseable model response", { status: 503 });
+      return new Response("unparseable model response", { status: 503, headers: cors });
     }
 
     const action = ACTIONS.includes(parsed?.action) ? parsed.action : "unknown";
@@ -151,16 +160,13 @@ Deno.serve(async (req) => {
       ? Math.min(1, Math.max(0, parsed.confidence))
       : 0;
 
-    return new Response(
-      JSON.stringify({
-        action,
-        volume,
-        target: typeof parsed?.target === "string" ? parsed.target : null,
-        confidence,
-      }),
-      { headers: { "Content-Type": "application/json" } },
-    );
+    return json({
+      action,
+      volume,
+      target: typeof parsed?.target === "string" ? parsed.target : null,
+      confidence,
+    });
   } catch (error) {
-    return new Response(JSON.stringify({ error: String(error) }), { status: 500 });
+    return json({ error: String(error) }, 500);
   }
 });

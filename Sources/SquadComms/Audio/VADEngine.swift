@@ -27,6 +27,16 @@ final class VADEngine: ObservableObject {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
 
+        // A 0 Hz format means the session was not active when the tap went in.
+        // installTap then throws an Objective-C exception that Swift cannot
+        // catch, so the app dies here rather than reporting anything.
+        Log.audio.info("installing VAD tap: rate=\(format.sampleRate, privacy: .public) ch=\(format.channelCount, privacy: .public) hasBuffer=\(self.onBuffer != nil, privacy: .public)")
+        guard format.sampleRate > 0 else {
+            Log.audio.error("VAD tap ABORTED: input format is 0 Hz — audio session not active")
+            throw NSError(domain: "SquadComms.VAD", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Input format unavailable (0 Hz)"])
+        }
+
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             guard let self else { return }
@@ -36,12 +46,14 @@ final class VADEngine: ObservableObject {
 
         engine.prepare()
         try engine.start()
+        Log.audio.info("VAD engine started running=\(self.engine.isRunning, privacy: .public)")
     }
 
     func stop() {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         state = .silence
+        Log.audio.info("VAD engine stopped")
     }
 
     private func process(_ buffer: AVAudioPCMBuffer) {
@@ -58,6 +70,7 @@ final class VADEngine: ObservableObject {
             guard prefs.openMic, db > onset else { return }
             lastSpeechAt = now
             DispatchQueue.main.async {
+                Log.audio.info("VAD onset at \(db, privacy: .public) dB (threshold \(onset, privacy: .public))")
                 self.state = .transmitting
                 self.onTransmissionBegan?()
             }
@@ -75,6 +88,7 @@ final class VADEngine: ObservableObject {
                 DispatchQueue.main.async { self.state = .transmitting }
             } else if now.timeIntervalSince(lastSpeechAt) > trailing {
                 DispatchQueue.main.async {
+                    Log.audio.info("VAD released after \(trailing, privacy: .public)s trailing")
                     self.state = .silence
                     self.onTransmissionEnded?()
                 }
