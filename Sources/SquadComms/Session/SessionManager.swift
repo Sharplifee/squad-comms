@@ -43,6 +43,13 @@ final class SessionManager: ObservableObject {
     /// Exposed so the radar can read live distances and drive the range control.
     let proximity = ProximityEngine()
     private var proximityCancellable: AnyCancellable?
+
+    /// One gain envelope per person. Setting a remote track's volume straight
+    /// from 0 to 1 the instant VAD fires is a step change in the middle of a
+    /// stream — it clicks, and it is the difference between an intercom that
+    /// sounds built and one that sounds bolted together.
+    private var envelopes: [UUID: VoiceEnvelope] = [:]
+    private var envelopeTimer: AnyCancellable?
     private var speakingRemotes = Set<UUID>()
 
     init() {
@@ -276,21 +283,64 @@ final class SessionManager: ObservableObject {
     /// Per-listener volume is applied to LiveKit remote tracks — never by
     /// reconfiguring AVAudioSession. This is the fix for the background
     /// audio quality bug from the original build.
+    /// Set where each person's voice *should* sit. The envelope walks the
+    /// actual gain there over the next few hundred milliseconds.
     private func applyRemoteVolumes() {
-        for participant in room.remoteParticipants.values {
-            guard let id = UUID(uuidString: participant.identity?.stringValue ?? ""),
-                  let member = members.first(where: { $0.id == id }) else { continue }
+        for member in members {
+            let envelope = envelopes[member.id] ?? {
+                let new = VoiceEnvelope()
+                envelopes[member.id] = new
+                return new
+            }()
+
             // On a private line the other party is the only thing that should
             // be clearly audible; the rest of the squad drops well down rather
             // than to silence, so you still notice if the room erupts.
-            var gain = member.isMutedByMe ? 0 : member.volume
+            var target = member.isMutedByMe ? 0 : Float(member.volume)
             if let solo = privateLineFrom ?? privateLineTo {
-                gain = (member.id == solo.id) ? max(gain, 0.9) : gain * 0.12
+                target = (member.id == solo.id) ? max(target, 0.9) : target * 0.12
             }
-            for publication in participant.audioTracks {
-                (publication.track as? RemoteAudioTrack)?.volume = gain
+
+            envelope.openLevel = target
+            if target > 0 && member.isSpeaking {
+                envelope.open()
+            } else if target == 0 {
+                envelope.open()          // muting is immediate on purpose
+                envelope.openLevel = 0
+            } else {
+                envelope.close()
             }
         }
+        startEnvelopeDriver()
+    }
+
+    /// Drives every envelope at 60 Hz and pushes the result onto the tracks.
+    /// Runs only while there is something still moving, so an idle squad costs
+    /// nothing.
+    private func startEnvelopeDriver() {
+        guard envelopeTimer == nil else { return }
+        envelopeTimer = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self else { return }
+                var moving = false
+
+                for participant in self.room.remoteParticipants.values {
+                    guard let id = UUID(uuidString: participant.identity?.stringValue ?? ""),
+                          let envelope = self.envelopes[id] else { continue }
+                    let previous = envelope.currentGain
+                    let gain = envelope.tick()
+                    if abs(gain - previous) > 0.0001 { moving = true }
+                    for publication in participant.audioTracks {
+                        (publication.track as? RemoteAudioTrack)?.volume = Double(gain)
+                    }
+                }
+
+                if !moving {
+                    self.envelopeTimer?.cancel()
+                    self.envelopeTimer = nil
+                }
+            }
     }
 
     func broadcast(_ event: DataEvent) {
@@ -362,6 +412,9 @@ extension SessionManager: RoomDelegate {
 
             if let index = members.firstIndex(where: { $0.id == id }) {
                 members[index].isSpeaking = (event == .speechStart)
+                // Speech state is what opens and closes the envelope, so the
+                // ramp has to be re-driven the moment it changes.
+                applyRemoteVolumes()
             }
 
             let wasQuiet = speakingRemotes.isEmpty

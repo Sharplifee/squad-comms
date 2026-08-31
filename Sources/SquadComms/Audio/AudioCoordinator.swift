@@ -15,6 +15,7 @@ final class AudioCoordinator: ObservableObject {
 
     private let vad = VADEngine()
     private let ducking = DuckingController()
+    let audioSession = AudioSessionController()
     private let commands = CommandEngine()
     private weak var session: SessionManager?
     private var cancellables = Set<AnyCancellable>()
@@ -73,7 +74,9 @@ final class AudioCoordinator: ObservableObject {
             return
         }
         do {
-            try ducking.configureForAmbientVoice()
+            // Session is configured once here and never touched again while
+            // audio is playing — see AudioSessionController.
+            try audioSession.configure()
             // Buffers must be forwarded BEFORE the engine starts, or the first
             // utterance after launch is dropped.
             vad.onBuffer = { [weak self] buffer in
