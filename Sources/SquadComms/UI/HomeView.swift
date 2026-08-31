@@ -8,6 +8,7 @@ import SwiftUI
 /// nothing was the answer to anything — you had to read all of it to learn one
 /// thing. Here the radar is the only large element on screen.
 struct HomeView: View {
+    @ObservedObject var focus: FocusModeController
     @EnvironmentObject private var session: SessionManager
     @EnvironmentObject private var audio: AudioCoordinator
     @State private var showSettings = false
@@ -39,7 +40,6 @@ struct HomeView: View {
                     } footer: {
                         Text("Bluetooth range only — it doesn't affect who can hear you.")
                     }
-                    MixerView()
                 }
 
                 if !PreferencesStore.shared.current.openMic {
@@ -51,8 +51,20 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
+                    Menu {
+                        FocusButton(focus: focus)
+                        Button {
+                            session.muteAll(!allMuted)
+                        } label: {
+                            Label(allMuted ? "Unmute everyone" : "Mute everyone",
+                                  systemImage: allMuted ? "speaker.wave.2" : "speaker.slash")
+                        }
+                        Divider()
+                        Button { showSettings = true } label: {
+                            Label("Settings", systemImage: "gearshape")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
                 ToolbarItem(placement: .topBarLeading) {
@@ -66,6 +78,10 @@ struct HomeView: View {
         }
         .task { await audio.startListening() }
         .onDisappear { audio.stopListening() }
+    }
+
+    private var allMuted: Bool {
+        !session.members.isEmpty && session.members.allSatisfy(\.isMutedByMe)
     }
 
     // MARK: - Hero

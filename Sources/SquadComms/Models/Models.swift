@@ -74,8 +74,39 @@ enum SessionState: Equatable {
     case failed(String)
 }
 
-struct Preferences: Codable {
+enum NoiseSuppression: String, Codable, CaseIterable, Identifiable {
+    case none, standard, active
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .none:     return "Off"
+        case .standard: return "Standard"
+        case .active:   return "Active"
+        }
+    }
+    var detail: String {
+        switch self {
+        case .none:     return "Rawest signal. Best if your gym is quiet."
+        case .standard: return "Balanced. Handles most background noise."
+        case .active:   return "Strongest. Can thin out your voice."
+        }
+    }
+}
+
+struct Preferences: Codable, Equatable {
     var displayName: String = "Me"
+
+    // Audio tab
+    var intercomVolume: Double = 0.80
+    var selfMonitor: Double = 0.20
+    var autoPause: Bool = false
+    var autoPauseSeconds: Double = 8
+    var autoRewind: Bool = false
+    var noiseSuppression: NoiseSuppression = .standard
+
+    // Presence
+    var ghostMode: Bool = false
+    var privateSession: Bool = false
     var duckBehavior: DuckBehavior = .duck
     var duckLevel: Double = 0.10          // 10% of current volume
     var rewindSeconds: Double = 8

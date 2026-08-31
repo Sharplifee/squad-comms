@@ -27,6 +27,8 @@ final class SessionManager: ObservableObject {
     /// Somebody has opened a direct line to you.
     @Published private(set) var privateLineFrom: Member?
     @Published private(set) var selfMuted = false
+    /// When the current session began, for the diagnostics readout.
+    @Published private(set) var sessionStart: Date?
 
     /// Our own LiveKit identity, used to tell whether an inbound private line
     /// was addressed to this device.
@@ -155,6 +157,7 @@ final class SessionManager: ObservableObject {
         if let me = UUID(uuidString: room.localParticipant.identity?.stringValue ?? "") {
             proximity.start(squadID: squad.id, selfID: me)
         }
+        sessionStart = Date()
         state = .connected
         Telemetry.event("session_connected", ["squad": squad.id.uuidString])
     }
@@ -169,6 +172,17 @@ final class SessionManager: ObservableObject {
     func setSelfMuted(_ muted: Bool) {
         selfMuted = muted
         if muted { Task { try? await room.localParticipant.setMicrophone(enabled: false) } }
+    }
+
+    /// Re-apply preference-driven audio values after the Audio tab changes
+    /// them. Without this the sliders move and nothing happens until the next
+    /// reconnect.
+    func applyPreferences() {
+        let prefs = PreferencesStore.shared.current
+        for index in members.indices where !members[index].isMutedByMe {
+            members[index].volume = prefs.intercomVolume
+        }
+        applyRemoteVolumes()
     }
 
     func muteAll(_ muted: Bool) {
