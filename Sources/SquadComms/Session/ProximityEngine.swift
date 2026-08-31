@@ -42,6 +42,7 @@ final class ProximityEngine: NSObject, ObservableObject {
     private var central: CBCentralManager?
     private var peripheral: CBPeripheralManager?
     private var squadID: UUID?
+    private var selfID: UUID?
     private var smoothed: [UUID: Double] = [:]
     /// Identity given to a fingerprint, so a rotated address resolves back to
     /// the contact already on the radar instead of spawning a duplicate.
@@ -56,8 +57,16 @@ final class ProximityEngine: NSObject, ObservableObject {
 
     // MARK: - Lifecycle
 
-    func start(squadID: UUID) {
+    /// - Parameters:
+    ///   - squadID: scoped so we only see our own squad, carried in the service data.
+    ///   - selfID:  this device's participant identity. Advertising the squad ID
+    ///              here was the bug that made the radar useless — every member
+    ///              broadcast the same string, so all peers decoded to one
+    ///              identity and collapsed into a single dot, and Member.nearby
+    ///              could never be true for anyone.
+    func start(squadID: UUID, selfID: UUID) {
         self.squadID = squadID
+        self.selfID = selfID
         central = CBCentralManager(delegate: self, queue: .global(qos: .utility))
         peripheral = CBPeripheralManager(delegate: self, queue: .global(qos: .utility))
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
@@ -180,6 +189,9 @@ extension ProximityEngine: CBCentralManagerDelegate {
                         rssi RSSI: NSNumber) {
         guard let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String,
               let id = UUID(uuidString: name) else { return }
+        // Our own advertisement comes back through the scanner; counting it
+        // would put a phantom contact on top of the centre marker.
+        guard id != selfID else { return }
         guard RSSI.intValue != 127 else { return }   // 127 = unreadable
         let print = DeviceFingerprint(advertisementData: advertisementData, rssi: RSSI.intValue)
         ingest(id: identity(for: id, fingerprint: print),
@@ -192,10 +204,12 @@ extension ProximityEngine: CBCentralManagerDelegate {
 
 extension ProximityEngine: CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ manager: CBPeripheralManager) {
-        guard manager.state == .poweredOn, let squadID else { return }
+        guard manager.state == .poweredOn, let selfID else { return }
         manager.startAdvertising([
             CBAdvertisementDataServiceUUIDsKey: [Self.serviceUUID],
-            CBAdvertisementDataLocalNameKey: squadID.uuidString
+            // The local name carries who this device is. Peers are matched to
+            // squad members by this value, so it must be per-person.
+            CBAdvertisementDataLocalNameKey: selfID.uuidString
         ])
     }
 }

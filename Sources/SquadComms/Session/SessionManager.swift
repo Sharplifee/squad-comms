@@ -150,7 +150,11 @@ final class SessionManager: ObservableObject {
 
         self.squad = squad
         UserDefaults.standard.set(squad.joinCode, forKey: "squadcomms.lastCode")
-        proximity.start(squadID: squad.id)
+        // Each device must advertise ITSELF, not the squad, or every peer
+        // decodes to the same identity and the radar shows one dot.
+        if let me = UUID(uuidString: room.localParticipant.identity?.stringValue ?? "") {
+            proximity.start(squadID: squad.id, selfID: me)
+        }
         state = .connected
         Telemetry.event("session_connected", ["squad": squad.id.uuidString])
     }
@@ -248,7 +252,20 @@ final class SessionManager: ObservableObject {
 
     func broadcast(_ event: DataEvent) {
         guard let data = try? JSONEncoder().encode(event) else { return }
-        Task { try? await room.localParticipant.publish(data: data, options: DataPublishOptions(reliable: false)) }
+        // Speech start/stop is fine to drop — another one follows in
+        // milliseconds. A private-line close is not: if it goes missing the far
+        // end stays ducked to 12% permanently with no way to recover, so those
+        // go reliably.
+        let mustArrive: Bool
+        switch event {
+        case .privateLineOpened, .privateLineClosed: mustArrive = true
+        case .speechStart, .speechEnd:               mustArrive = false
+        }
+        Task {
+            try? await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(reliable: mustArrive))
+        }
     }
 
     private func friendly(_ error: Error) -> String {

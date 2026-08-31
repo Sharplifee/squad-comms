@@ -83,11 +83,27 @@ struct MemberRow: View {
             // open is how you say something to one person while believing the
             // whole squad can hear it.
             .contentShape(Rectangle())
-            .onLongPressGesture(minimumDuration: 0.28, maximumDistance: 30) {
-            } onPressingChanged: { pressing in
-                holding = pressing
-                if pressing { session.beginPrivateLine(to: member) }
-                else        { session.endPrivateLine() }
+            // onPressingChanged fires on touch-DOWN, not after the minimum
+            // duration, so wiring the line to it opened and closed a private
+            // channel on every stray tap and every scroll that started on a
+            // row. The line must only open once the press is actually
+            // recognised as a hold, and close when the finger lifts.
+            .gesture(
+                LongPressGesture(minimumDuration: 0.28)
+                    .onEnded { _ in
+                        holding = true
+                        session.beginPrivateLine(to: member)
+                    }
+                    .sequenced(before: DragGesture(minimumDistance: 0))
+                    .onEnded { _ in
+                        holding = false
+                        session.endPrivateLine()
+                    }
+            )
+            // A finger lifted outside the row, or an interrupted gesture, must
+            // still close the line — otherwise it stays open silently.
+            .onDisappear {
+                if holding { holding = false; session.endPrivateLine() }
             }
 
             HStack(spacing: 10) {

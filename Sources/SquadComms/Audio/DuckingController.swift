@@ -28,9 +28,18 @@ final class DuckingController {
 
         switch behavior {
         case .duck:
-            fadeMedia(to: Float(level), over: 0.18)
+            // No app can set Spotify's volume. The ONLY mechanism on iOS that
+            // lowers another app's audio is AVAudioSession's .duckOthers, so
+            // that is what has to run here. fadeMedia() previously just posted
+            // a notification with no observers anywhere in the project, which
+            // meant the headline feature of this app did nothing at all.
+            setDuckingOthers(true)
         case .pause, .rewind:
+            // applicationMusicPlayer only controls Apple Music. For Spotify and
+            // everything else, ducking is the only lever we have, so fall back
+            // to it rather than silently doing nothing.
             MPMusicPlayerController.applicationMusicPlayer.pause()
+            setDuckingOthers(true)
         }
     }
 
@@ -41,10 +50,12 @@ final class DuckingController {
 
         switch behavior {
         case .duck:
-            fadeMedia(to: 1.0, over: 0.35)
+            setDuckingOthers(false)
         case .pause:
+            setDuckingOthers(false)
             MPMusicPlayerController.applicationMusicPlayer.play()
         case .rewind:
+            setDuckingOthers(false)
             let player = MPMusicPlayerController.applicationMusicPlayer
             player.currentPlaybackTime = max(0, player.currentPlaybackTime - rewindSeconds)
             player.play()
@@ -55,7 +66,7 @@ final class DuckingController {
     func yieldForInterruption() {
         if isDucked {
             isDucked = false
-            fadeMedia(to: 1.0, over: 0.1)
+            setDuckingOthers(false)
         }
         try? session.setActive(false, options: [.notifyOthersOnDeactivation])
     }
@@ -64,23 +75,24 @@ final class DuckingController {
         try? configureForAmbientVoice()
     }
 
-    // Volume is applied to LiveKit remote tracks by the room manager; this
-    // handles the user's own media layer only.
-    private func fadeMedia(to target: Float, over duration: TimeInterval) {
-        // Ramp in small steps so it never sounds like a hard cut.
-        let steps = 12
-        let interval = duration / Double(steps)
-        let start = restoreVolume ?? 1.0
-        restoreVolume = target == 1.0 ? nil : start
+    /// Add or remove `.duckOthers` on the live session.
+    ///
+    /// The base category stays `.playAndRecord` with `.mixWithOthers` so we
+    /// never seize the audio session — that combination is what killed music
+    /// in v1 and must not come back. `.duckOthers` is layered on only while a
+    /// squad member is actually speaking and removed the moment they stop, so
+    /// other apps duck and recover on their own.
+    private func setDuckingOthers(_ ducking: Bool) {
+        var options: AVAudioSession.CategoryOptions =
+            [.mixWithOthers, .allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+        if ducking { options.insert(.duckOthers) }
 
-        for i in 0...steps {
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(i)) {
-                let t = Float(i) / Float(steps)
-                let value = start + (target - start) * t
-                NotificationCenter.default.post(
-                    name: .squadMediaGainChanged, object: nil, userInfo: ["gain": value]
-                )
-            }
+        do {
+            try session.setCategory(.playAndRecord, mode: .voiceChat, options: options)
+        } catch {
+            // A failure here must never take the voice channel down with it —
+            // hearing your partner matters more than the music dipping.
+            Log.audio.error("duck toggle failed: \(error.localizedDescription)")
         }
     }
 }
