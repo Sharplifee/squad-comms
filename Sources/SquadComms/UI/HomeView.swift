@@ -10,7 +10,11 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
+                    if let from = session.privateLineFrom {
+                        PrivateLineBanner(name: from.displayName)
+                    }
                     radarCard
+                    SquadMixerView()
                     statusCard
                     if !session.members.isEmpty {
                         MixerView()
@@ -215,5 +219,27 @@ struct SwitchSquadSheet: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
         .onAppear { focused = true }
+    }
+}
+
+/// An inbound direct line has to be obvious at a glance, not just audible —
+/// you might be mid-set with the phone face down when the tone plays.
+struct PrivateLineBanner: View {
+    let name: String
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "person.wave.2.fill")
+                .font(.system(size: 14))
+            Text("\(name.uppercased()) — DIRECT LINE")
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(0.8)
+            Spacer()
+        }
+        .foregroundStyle(Theme.background)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(Theme.plate15, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }

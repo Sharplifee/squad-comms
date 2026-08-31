@@ -6,12 +6,33 @@ import LiveKit
 @MainActor
 final class SessionManager: ObservableObject {
 
-    enum DataEvent: String, Codable { case speechStart, speechEnd }
+    /// Wire events between squad members. Private-line events carry the
+    /// intended recipient, because a direct line is only private if the other
+    /// devices can tell it was not addressed to them.
+    enum DataEvent: Codable, Equatable {
+        case speechStart
+        case speechEnd
+        case privateLineOpened(to: UUID)
+        case privateLineClosed(to: UUID)
+    }
 
     @Published private(set) var state: SessionState = .idle
     @Published private(set) var squad: Squad?
     @Published private(set) var members: [Member] = []
+
+    /// Whoever you currently hold a direct line to. While this is set your
+    /// voice reaches only that person, and everyone else in the squad is
+    /// ducked hard so the private exchange stays legible.
+    @Published private(set) var privateLineTo: Member?
+    /// Somebody has opened a direct line to you.
+    @Published private(set) var privateLineFrom: Member?
     @Published private(set) var selfMuted = false
+
+    /// Our own LiveKit identity, used to tell whether an inbound private line
+    /// was addressed to this device.
+    private var selfParticipantID: UUID? {
+        UUID(uuidString: room.localParticipant.identity?.stringValue ?? "")
+    }
 
     var onRemoteSpeech: ((Bool) -> Void)?
 
@@ -157,6 +178,48 @@ final class SessionManager: ObservableObject {
         applyRemoteVolumes()
     }
 
+    // MARK: - Private line
+    //
+    // Hold a name and you are talking only to that person. Release and you are
+    // back on the squad. Deliberately momentary rather than a mode you toggle:
+    // a private channel you can forget you left open is how you say something
+    // to one person that you believed the whole group could hear, or worse.
+
+    func beginPrivateLine(to member: Member) {
+        guard privateLineTo?.id != member.id else { return }
+        privateLineTo = member
+        PrivateLineTones.outgoing()
+        Haptics.impact(.rigid)
+        broadcast(.privateLineOpened(to: member.id))
+        applyRemoteVolumes()
+        setMicrophone(enabled: true)
+    }
+
+    func endPrivateLine() {
+        guard let member = privateLineTo else { return }
+        privateLineTo = nil
+        PrivateLineTones.closed()
+        broadcast(.privateLineClosed(to: member.id))
+        applyRemoteVolumes()
+        setMicrophone(enabled: false)
+    }
+
+    /// Someone opened a direct line to you.
+    func receivePrivateLine(from id: UUID) {
+        guard let member = members.first(where: { $0.id == id }) else { return }
+        privateLineFrom = member
+        PrivateLineTones.incoming()
+        Haptics.impact(.rigid)
+        applyRemoteVolumes()
+    }
+
+    func endPrivateLine(from id: UUID) {
+        guard privateLineFrom?.id == id else { return }
+        privateLineFrom = nil
+        PrivateLineTones.closed()
+        applyRemoteVolumes()
+    }
+
     func setVolume(_ volume: Double, for member: Member) {
         guard let index = members.firstIndex(where: { $0.id == member.id }) else { return }
         members[index].volume = volume
@@ -170,7 +233,13 @@ final class SessionManager: ObservableObject {
         for participant in room.remoteParticipants.values {
             guard let id = UUID(uuidString: participant.identity?.stringValue ?? ""),
                   let member = members.first(where: { $0.id == id }) else { continue }
-            let gain = member.isMutedByMe ? 0 : member.volume
+            // On a private line the other party is the only thing that should
+            // be clearly audible; the rest of the squad drops well down rather
+            // than to silence, so you still notice if the room erupts.
+            var gain = member.isMutedByMe ? 0 : member.volume
+            if let solo = privateLineFrom ?? privateLineTo {
+                gain = (member.id == solo.id) ? max(gain, 0.9) : gain * 0.12
+            }
             for publication in participant.audioTracks {
                 (publication.track as? RemoteAudioTrack)?.volume = gain
             }
@@ -217,6 +286,19 @@ extension SessionManager: RoomDelegate {
             guard let participant,
                   let id = UUID(uuidString: participant.identity?.stringValue ?? ""),
                   let event = try? JSONDecoder().decode(DataEvent.self, from: data) else { return }
+
+            switch event {
+            case .privateLineOpened(let target):
+                // Only the addressed device opens the line; everyone else
+                // discards it, which is what makes it private.
+                if target == selfParticipantID { receivePrivateLine(from: id) }
+                return
+            case .privateLineClosed(let target):
+                if target == selfParticipantID { endPrivateLine(from: id) }
+                return
+            case .speechStart, .speechEnd:
+                break
+            }
 
             if let index = members.firstIndex(where: { $0.id == id }) {
                 members[index].isSpeaking = (event == .speechStart)

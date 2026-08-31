@@ -13,6 +13,9 @@ final class ProximityEngine: NSObject, ObservableObject {
 
     struct Contact: Identifiable, Equatable {
         let id: UUID
+        /// Survives Apple's ~15 minute MAC rotation. Without this the same
+        /// person becomes a new contact four times an hour.
+        var fingerprint: DeviceFingerprint?
         var rssi: Int
         var metres: Double
         var lastSeen: Date
@@ -40,6 +43,9 @@ final class ProximityEngine: NSObject, ObservableObject {
     private var peripheral: CBPeripheralManager?
     private var squadID: UUID?
     private var smoothed: [UUID: Double] = [:]
+    /// Identity given to a fingerprint, so a rotated address resolves back to
+    /// the contact already on the radar instead of spawning a duplicate.
+    private var fingerprintIdentity: [DeviceFingerprint: UUID] = [:]
     private var pruneTimer: Timer?
 
     private static let serviceUUID = CBUUID(string: "9F2A1C34-6B70-4E1D-9C2F-5A8E3D71B0C4")
@@ -101,7 +107,28 @@ final class ProximityEngine: NSObject, ObservableObject {
         }
     }
 
-    private func ingest(id: UUID, rssi: Int) {
+    /// Resolve an advertisement to a stable identity.
+    ///
+    /// Exact fingerprint match wins. Failing that, fuzzy-match against known
+    /// fingerprints and merge when enough segments agree — that is the case
+    /// where the address has just rotated. Only when nothing matches is this
+    /// treated as somebody new.
+    private func identity(for advertised: UUID, fingerprint: DeviceFingerprint?) -> UUID {
+        guard let fingerprint else { return advertised }
+
+        if let known = fingerprintIdentity[fingerprint] { return known }
+
+        for (candidate, id) in fingerprintIdentity
+        where candidate.agreement(with: fingerprint) >= DeviceFingerprint.mergeThreshold {
+            fingerprintIdentity[fingerprint] = id      // remember the new shape
+            return id
+        }
+
+        fingerprintIdentity[fingerprint] = advertised
+        return advertised
+    }
+
+    private func ingest(id: UUID, rssi: Int, fingerprint: DeviceFingerprint? = nil) {
         // Exponential smoothing on RSSI, not on distance — the conversion is
         // exponential, so smoothing after it over-weights close readings.
         let prior = smoothed[id] ?? Double(rssi)
@@ -118,7 +145,8 @@ final class ProximityEngine: NSObject, ObservableObject {
             next[i].lastSeen = Date()
             next[i].normalised = min(m / limit, 1.0)
         } else {
-            next.append(Contact(id: id, rssi: Int(value.rounded()), metres: m,
+            next.append(Contact(id: id, fingerprint: fingerprint,
+                                rssi: Int(value.rounded()), metres: m,
                                 lastSeen: Date(), normalised: min(m / limit, 1.0)))
         }
         next.sort { $0.metres < $1.metres }
@@ -153,7 +181,10 @@ extension ProximityEngine: CBCentralManagerDelegate {
         guard let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String,
               let id = UUID(uuidString: name) else { return }
         guard RSSI.intValue != 127 else { return }   // 127 = unreadable
-        ingest(id: id, rssi: RSSI.intValue)
+        let print = DeviceFingerprint(advertisementData: advertisementData, rssi: RSSI.intValue)
+        ingest(id: identity(for: id, fingerprint: print),
+               rssi: RSSI.intValue,
+               fingerprint: print)
     }
 }
 
