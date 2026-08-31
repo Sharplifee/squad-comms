@@ -58,6 +58,25 @@ final class DuckingController {
     func reset() {
         isDucked = false
     }
+
+    /// A phone call, Siri or an alarm has taken the audio session.
+    ///
+    /// Fighting for it is pointless and produces exactly the stuttering
+    /// contention this app exists to avoid, so drop any media behaviour we
+    /// asked for and let the interruption own the output.
+    func yieldForInterruption() {
+        isDucked = false
+    }
+
+    /// The interruption is over. If the user's setting was pause, their music
+    /// was paused by us rather than by the interruption, so it will not come
+    /// back on its own and has to be resumed explicitly.
+    func resumeAfterInterruption() {
+        let prefs = PreferencesStore.shared.current
+        if prefs.duckBehavior == .pause || prefs.duckBehavior == .rewind {
+            MPMusicPlayerController.applicationMusicPlayer.play()
+        }
+    }
 }
 
 extension Notification.Name {
