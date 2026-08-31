@@ -12,6 +12,7 @@ struct HomeView: View {
     @EnvironmentObject private var audio: AudioCoordinator
     @State private var showSettings = false
     @State private var showJoin = false
+    @State private var copied = false
 
     var body: some View {
         NavigationStack {
@@ -20,22 +21,24 @@ struct HomeView: View {
                     Section { privateLineRow }
                 }
 
-                Section {
-                    radar
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 16, trailing: 16))
-                        .listRowBackground(Color.clear)
-                }
-
-                Section {
-                    RangeLoaderView(index: Binding(
-                        get: { session.proximity.rangeIndex },
-                        set: { session.proximity.rangeIndex = $0 }
-                    ))
-                }
+                Section { lineStatus }
 
                 if session.members.isEmpty {
                     inviteSection
                 } else {
+                    Section {
+                        radar
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 16, trailing: 16))
+                            .listRowBackground(Color.clear)
+                    }
+                    Section {
+                        RangeLoaderView(index: Binding(
+                            get: { session.proximity.rangeIndex },
+                            set: { session.proximity.rangeIndex = $0 }
+                        ))
+                    } footer: {
+                        Text("Bluetooth range only — it doesn't affect who can hear you.")
+                    }
                     MixerView()
                 }
 
@@ -56,11 +59,6 @@ struct HomeView: View {
                     Button("Leave", role: .destructive) {
                         Task { await session.leave() }
                     }
-                }
-                // Live state belongs in the chrome, not in a card competing
-                // with the radar for attention.
-                ToolbarItem(placement: .status) {
-                    micStatus
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
@@ -84,6 +82,29 @@ struct HomeView: View {
     }
 
     // MARK: - Status
+
+    /// States the actual condition of the line in a sentence. The previous
+    /// version put this in a floating toolbar pill that rendered on top of the
+    /// list content and read "Li…" when truncated.
+    private var lineStatus: some View {
+        HStack(spacing: 12) {
+            Image(systemName: audio.isTransmitting ? "waveform" : "waveform.slash")
+                .font(.title3)
+                .foregroundStyle(audio.isTransmitting ? Theme.live : Theme.textFaint)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(audio.isTransmitting ? "They can hear you" : "Line open")
+                    .font(.body)
+                Text(audio.isTransmitting
+                     ? "Your voice is going through now."
+                     : "Put your phone away — talking opens the mic on its own.")
+                    .font(.caption)
+                    .foregroundStyle(Theme.textDim)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 2)
+    }
 
     private var micStatus: some View {
         HStack(spacing: 6) {
@@ -113,26 +134,45 @@ struct HomeView: View {
     private var inviteSection: some View {
         Section {
             if let code = session.squad?.joinCode {
-                HStack {
-                    Text("Your code")
-                    Spacer()
+                // The code is the whole product surface when you are alone, so
+                // it gets the space rather than sitting as a grey trailing
+                // label on a row.
+                VStack(spacing: 10) {
                     Text(code)
-                        .font(.body.monospaced())
+                        .font(.system(size: 44, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .kerning(4)
+                    Text("Your squad code")
+                        .font(.footnote)
                         .foregroundStyle(Theme.textDim)
                 }
-                ShareLink(item: "Join my squad on Squadstream — code \(code)") {
-                    Label("Invite someone", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .listRowBackground(Color.clear)
+
+                ShareLink(
+                    item: "Join my squad on Squadstream — code \(code)\n\nhttps://testflight.apple.com/join/fXWm1aq2"
+                ) {
+                    Label("Send an invite", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    UIPasteboard.general.string = code
+                    Haptics.selection()
+                    copied = true
+                } label: {
+                    Label(copied ? "Copied" : "Copy code",
+                          systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+
+                Button {
+                    showJoin = true
+                } label: {
+                    Label("Enter someone else's code", systemImage: "arrow.right.circle")
                 }
             }
-            Button {
-                showJoin = true
-            } label: {
-                Label("Join another squad", systemImage: "arrow.right.circle")
-            }
-        } header: {
-            Text("You're the only one on")
         } footer: {
-            Text("Share your code and they drop straight in — there's nothing for them to set up.")
+            Text("They install Squadstream, type this code, and they're on. Nothing else to set up.")
         }
     }
 

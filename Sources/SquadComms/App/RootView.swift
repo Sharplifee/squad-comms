@@ -2,11 +2,25 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var session: SessionManager
+    @State private var onboarded = UserDefaults.standard.bool(forKey: "squadcomms.onboarded")
 
     var body: some View {
         Group {
+            if !onboarded {
+                // Ask once, before anything connects. Without this the squad is
+                // named after the default "Me" and three system prompts fire
+                // unexplained over a spinner.
+                OnboardingView(isComplete: $onboarded)
+            } else {
+                connected
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: onboarded)
+    }
+
+    private var connected: some View {
+        Group {
             switch session.state {
-            // Nothing to enter. The line opens itself.
             case .idle:                 OpeningView()
             case .connecting:           ConnectingView()
             case .connected:            HomeView()
