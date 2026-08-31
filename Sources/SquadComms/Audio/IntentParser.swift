@@ -130,6 +130,11 @@ extension CommandEngine.Command {
         case .unmuteMe:  return .unmute
         case .rewind:    return .rewind
         case .leave:     return .leave
+        // Bare forms added alongside the explicit ones. "mute" on its own is
+        // the single most likely thing anyone actually says, and it maps to
+        // muting yourself — the same as "mute me".
+        case .mute:      return .mute
+        case .unmute:    return .unmute
         }
     }
 }
