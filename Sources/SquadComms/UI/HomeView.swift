@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// The main screen.
+///
+/// Shaped like Find My: one hero that answers "who is here", a plain list of
+/// people underneath, and everything else pushed into the toolbar or Settings.
+/// The previous version stacked five equally-weighted cards, which meant
+/// nothing was the answer to anything — you had to read all of it to learn one
+/// thing. Here the radar is the only large element on screen.
 struct HomeView: View {
     @EnvironmentObject private var session: SessionManager
     @EnvironmentObject private var audio: AudioCoordinator
@@ -8,34 +15,52 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 18) {
-                    if let from = session.privateLineFrom {
-                        PrivateLineBanner(name: from.displayName)
-                    }
-                    radarCard
-                    statusCard
-                    if !session.members.isEmpty {
-                        MixerView()
-                    } else {
-                        emptySquad
-                    }
-                    if !PreferencesStore.shared.current.openMic {
-                        pushToTalk
-                    }
+            List {
+                if session.privateLineFrom != nil {
+                    Section { privateLineRow }
                 }
-                .padding(20)
+
+                Section {
+                    radar
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 16, trailing: 16))
+                        .listRowBackground(Color.clear)
+                }
+
+                Section {
+                    RangeLoaderView(index: Binding(
+                        get: { session.proximity.rangeIndex },
+                        set: { session.proximity.rangeIndex = $0 }
+                    ))
+                }
+
+                if session.members.isEmpty {
+                    inviteSection
+                } else {
+                    MixerView()
+                }
+
+                if !PreferencesStore.shared.current.openMic {
+                    Section { pushToTalk.listRowInsets(EdgeInsets()) }
+                }
             }
-            .background(Theme.background)
-            .navigationTitle(session.squad?.name ?? "squad comms")
-            .navigationBarTitleDisplayMode(.inline)
+            .listStyle(.insetGrouped)
+            .navigationTitle(session.squad?.name ?? "Squad")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
                 }
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Leave") { Task { await session.leave() } }
-                        .foregroundStyle(Theme.muted)
+                    Button("Leave", role: .destructive) {
+                        Task { await session.leave() }
+                    }
+                }
+                // Live state belongs in the chrome, not in a card competing
+                // with the radar for attention.
+                ToolbarItem(placement: .status) {
+                    micStatus
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
@@ -45,108 +70,83 @@ struct HomeView: View {
         .onDisappear { audio.stopListening() }
     }
 
-    /// The radar is the hero. It answers the only question that matters when
-    /// you walk onto a gym floor: who is here, and how far away.
-    private var radarCard: some View {
-        VStack(spacing: 14) {
-            HStack {
-                Text("LIVE RADAR").stampLabel()
-                Spacer()
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(session.proximity.isScanning ? Theme.live : Theme.textFaint)
-                        .frame(width: 6, height: 6)
-                    Text(session.proximity.isScanning ? "SCANNING" : "BLUETOOTH OFF")
-                        .font(.system(size: 10, design: .monospaced))
-                        .tracking(1.0)
-                        .foregroundStyle(Theme.textFaint)
-                }
-            }
+    // MARK: - Hero
 
-            PlateRadarView(
-                contacts: session.proximity.contacts,
-                names: Dictionary(uniqueKeysWithValues: session.members.map { ($0.id, $0.displayName) }),
-                speakingID: session.members.first(where: { $0.isSpeaking })?.id,
-                isScanning: session.proximity.isScanning
-            )
-            .frame(maxWidth: 300)
-
-            RangeLoaderView(index: Binding(
-                get: { session.proximity.rangeIndex },
-                set: { session.proximity.rangeIndex = $0 }
-            ))
-        }
-        .card()
-    }
-
-    private var statusCard: some View {
-        VStack(spacing: 14) {
-            HStack {
-                Circle()
-                    .fill(audio.isTransmitting ? Theme.live : Theme.hairline)
-                    .frame(width: 10, height: 10)
-                Text(audio.isTransmitting ? "They can hear you" : "Line open, mic quiet")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                if let code = session.squad?.joinCode {
-                    Text(code)
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            LevelMeter(db: audio.inputLevelDB)
-
-            Text("Put your phone away. When someone talks, your music steps aside.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .card()
-    }
-
-    /// You are always in a squad, so "empty" means nobody has joined yours yet.
-    /// This is where the code lives now — as something you hand out, and a way
-    /// to move over to someone else's line if they already have one going.
-    private var emptySquad: some View {
-        VStack(spacing: 12) {
-            Text("You're the only one on")
-                .font(.headline)
-                .foregroundStyle(Theme.text)
-            Text("Send your code and they drop straight in — no setup on their end.")
-                .font(.footnote)
-                .foregroundStyle(Theme.textDim)
-                .multilineTextAlignment(.center)
-
-            if let code = session.squad?.joinCode {
-                Text(code)
-                    .font(.system(size: 30, weight: .semibold, design: .monospaced))
-                    .tracking(6)
-                    .foregroundStyle(Theme.text)
-                    .padding(.top, 2)
-
-                ShareLink(item: "Join my squad on squad comms — code \(code)") {
-                    Text("Share code").font(.subheadline.weight(.medium))
-                }
-            }
-
-            Button("Join someone else's") { showJoin = true }
-                .font(.footnote)
-                .foregroundStyle(Theme.textFaint)
-                .padding(.top, 2)
-        }
+    private var radar: some View {
+        PlateRadarView(
+            contacts: session.proximity.contacts,
+            names: Dictionary(uniqueKeysWithValues: session.members.map { ($0.id, $0.displayName) }),
+            speakingID: session.members.first(where: { $0.isSpeaking })?.id,
+            isScanning: session.proximity.isScanning
+        )
         .frame(maxWidth: .infinity)
-        .card()
+        .frame(maxHeight: 320)
     }
+
+    // MARK: - Status
+
+    private var micStatus: some View {
+        HStack(spacing: 6) {
+            Image(systemName: audio.isTransmitting ? "waveform" : "waveform.slash")
+                .font(.caption)
+                .foregroundStyle(audio.isTransmitting ? Theme.live : Theme.textFaint)
+                .symbolEffect(.variableColor, isActive: audio.isTransmitting)
+            Text(audio.isTransmitting ? "They can hear you" : "Line open")
+                .font(.caption)
+                .foregroundStyle(Theme.textDim)
+        }
+    }
+
+    private var privateLineRow: some View {
+        Label {
+            Text("Direct line with \(session.privateLineFrom?.displayName ?? "")")
+                .font(.subheadline.weight(.medium))
+        } icon: {
+            Image(systemName: "person.wave.2.fill")
+                .foregroundStyle(Theme.warning)
+        }
+        .listRowBackground(Theme.warning.opacity(0.12))
+    }
+
+    // MARK: - Invite
+
+    private var inviteSection: some View {
+        Section {
+            if let code = session.squad?.joinCode {
+                HStack {
+                    Text("Your code")
+                    Spacer()
+                    Text(code)
+                        .font(.body.monospaced())
+                        .foregroundStyle(Theme.textDim)
+                }
+                ShareLink(item: "Join my squad on Squadstream — code \(code)") {
+                    Label("Invite someone", systemImage: "square.and.arrow.up")
+                }
+            }
+            Button {
+                showJoin = true
+            } label: {
+                Label("Join another squad", systemImage: "arrow.right.circle")
+            }
+        } header: {
+            Text("You're the only one on")
+        } footer: {
+            Text("Share your code and they drop straight in — there's nothing for them to set up.")
+        }
+    }
+
+    // MARK: - Push to talk
 
     private var pushToTalk: some View {
         Button { } label: {
-            Text(audio.isTransmitting ? "Release to stop" : "Hold to talk")
+            Label(audio.isTransmitting ? "Release to stop" : "Hold to talk",
+                  systemImage: audio.isTransmitting ? "mic.fill" : "mic")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 22)
-                .background(audio.isTransmitting ? Theme.live : Theme.surfaceAlt,
-                            in: RoundedRectangle(cornerRadius: Theme.corner))
+                .padding(.vertical, 18)
+                .foregroundStyle(audio.isTransmitting ? Color.white : Theme.accent)
+                .background(audio.isTransmitting ? Theme.live : Theme.surface)
         }
         .buttonStyle(.plain)
         .simultaneousGesture(
@@ -157,29 +157,10 @@ struct HomeView: View {
     }
 }
 
-struct LevelMeter: View {
-    let db: Float
+// MARK: - Join sheet
 
-    private var normalized: CGFloat {
-        CGFloat(max(0, min(1, (db + 60) / 60)))
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Theme.surfaceAlt)
-                Capsule()
-                    .fill(Theme.live)
-                    .frame(width: geo.size.width * normalized)
-                    .animation(.linear(duration: 0.08), value: normalized)
-            }
-        }
-        .frame(height: 6)
-    }
-}
-
-/// Entering a code is now an explicit choice made from inside a working app,
-/// not the price of admission.
+/// Entering a code is a deliberate choice made from inside a working app, not
+/// the price of admission.
 struct SwitchSquadSheet: View {
     @EnvironmentObject private var session: SessionManager
     @Environment(\.dismiss) private var dismiss
@@ -187,58 +168,37 @@ struct SwitchSquadSheet: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(spacing: 18) {
-            Text("Join someone else's squad")
-                .font(.headline)
-                .foregroundStyle(Theme.text)
-            Text("You'll leave your own line to do it.")
-                .font(.footnote)
-                .foregroundStyle(Theme.textDim)
-
-            TextField("000000", text: $code)
-                .textFieldStyle(.plain)
-                .keyboardType(.numberPad)
-                .font(.system(size: 36, weight: .semibold, design: .monospaced))
-                .multilineTextAlignment(.center)
-                .focused($focused)
-                .onChange(of: code) { _, new in
-                    code = String(new.filter(\.isNumber).prefix(6))
-                    if code.count == 6 {
-                        Task {
-                            await session.join(code: code)
-                            dismiss()
+        NavigationStack {
+            List {
+                Section {
+                    TextField("000000", text: $code)
+                        .keyboardType(.numberPad)
+                        .font(.title.monospaced())
+                        .multilineTextAlignment(.center)
+                        .focused($focused)
+                        .onChange(of: code) { _, new in
+                            code = String(new.filter(\.isNumber).prefix(6))
+                            if code.count == 6 {
+                                Task {
+                                    await session.join(code: code)
+                                    dismiss()
+                                }
+                            }
                         }
-                    }
+                        .padding(.vertical, 8)
+                } footer: {
+                    Text("You'll leave your own line to join theirs.")
                 }
-                .padding(.vertical, 10)
-
-            Spacer()
+            }
+            .navigationTitle("Join a squad")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
         }
-        .padding(28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.background)
+        .presentationDetents([.medium])
         .onAppear { focused = true }
-    }
-}
-
-/// An inbound direct line has to be obvious at a glance, not just audible —
-/// you might be mid-set with the phone face down when the tone plays.
-struct PrivateLineBanner: View {
-    let name: String
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Image(systemName: "person.wave.2.fill")
-                .font(.system(size: 14))
-            Text("\(name.uppercased()) — DIRECT LINE")
-                .font(.system(size: 13, weight: .semibold))
-                .tracking(0.8)
-            Spacer()
-        }
-        .foregroundStyle(Theme.background)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .background(Theme.plate15, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }

@@ -1,32 +1,35 @@
 import SwiftUI
 
-/// Per-listener mixing. Everyone controls their own experience — you can
-/// quietly turn someone down without it being a whole thing.
+/// Who you're hearing, and how loud.
+///
+/// A plain grouped-list section: one row per person, name and state on the
+/// left, a volume slider beneath. Muting is a swipe action rather than a
+/// permanent button, because muting someone is occasional and a button for it
+/// on every row adds visual weight to the thing you do least.
+///
+/// Holding a name opens a direct line to that person only.
 struct MixerView: View {
     @EnvironmentObject private var session: SessionManager
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Who you're hearing")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Button(allMuted ? "Unmute everyone" : "Mute everyone") {
-                    session.muteAll(!allMuted)
-                }
-                .font(.footnote)
-                .foregroundStyle(Theme.accent)
-            }
-            .padding(.bottom, 14)
-
+        Section {
             ForEach(session.members) { member in
                 MemberRow(member: member)
-                if member.id != session.members.last?.id {
-                    Divider().overlay(Theme.hairline).padding(.vertical, 12)
-                }
             }
+        } header: {
+            HStack {
+                Text("Squad")
+                Spacer()
+                Button(allMuted ? "Unmute all" : "Mute all") {
+                    session.muteAll(!allMuted)
+                    Haptics.selection()
+                }
+                .font(.footnote)
+                .textCase(nil)
+            }
+        } footer: {
+            Text("Hold a name to talk to that person only.")
         }
-        .card()
     }
 
     private var allMuted: Bool {
@@ -43,71 +46,38 @@ struct MemberRow: View {
     private var theyOpenedPrivate: Bool { session.privateLineFrom?.id == member.id }
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(member.isSpeaking && !member.isMutedByMe ? Theme.live : Theme.hairline)
-                    .frame(width: 8, height: 8)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                // Presence, as a single glyph rather than a coloured dot plus a
+                // badge plus a label. SF Symbols carry the state on their own.
+                Image(systemName: symbol)
+                    .font(.body)
+                    .foregroundStyle(symbolColour)
+                    .frame(width: 22)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(member.displayName)
-                        .font(.body.weight(.medium))
-                    if isPrivate || theyOpenedPrivate {
-                        Text(isPrivate ? "DIRECT LINE — HOLDING" : "DIRECT LINE TO YOU")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .tracking(0.7)
-                            .foregroundStyle(Theme.warning)
+                        .foregroundStyle(member.isMutedByMe ? Theme.textDim : Theme.text)
+                    if let detail {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(isPrivate || theyOpenedPrivate ? Theme.warning : Theme.textDim)
                     }
-                }
-
-                if member.nearby && !isPrivate && !theyOpenedPrivate {
-                    Text("nearby")
-                        .font(.caption2.weight(.medium))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Theme.surfaceAlt, in: Capsule())
-                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                Button {
-                    session.setMuted(!member.isMutedByMe, for: member)
-                } label: {
-                    Image(systemName: member.isMutedByMe ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .foregroundStyle(member.isMutedByMe ? Theme.muted : .secondary)
+                if member.nearby && !isPrivate && !theyOpenedPrivate {
+                    Text("Nearby")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textFaint)
                 }
-                .buttonStyle(.plain)
-            }
-            // Hold a name to talk to that person only. A hold rather than a
-            // toggle on purpose: a private channel you can forget you left
-            // open is how you say something to one person while believing the
-            // whole squad can hear it.
-            .contentShape(Rectangle())
-            // onPressingChanged fires on touch-DOWN, not after the minimum
-            // duration, so wiring the line to it opened and closed a private
-            // channel on every stray tap and every scroll that started on a
-            // row. The line must only open once the press is actually
-            // recognised as a hold, and close when the finger lifts.
-            .gesture(
-                LongPressGesture(minimumDuration: 0.28)
-                    .onEnded { _ in
-                        holding = true
-                        session.beginPrivateLine(to: member)
-                    }
-                    .sequenced(before: DragGesture(minimumDistance: 0))
-                    .onEnded { _ in
-                        holding = false
-                        session.endPrivateLine()
-                    }
-            )
-            // A finger lifted outside the row, or an interrupted gesture, must
-            // still close the line — otherwise it stays open silently.
-            .onDisappear {
-                if holding { holding = false; session.endPrivateLine() }
             }
 
             HStack(spacing: 10) {
-                Image(systemName: "speaker.fill").font(.caption2).foregroundStyle(.tertiary)
+                Image(systemName: "speaker.fill")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textFaint)
                 Slider(
                     value: Binding(
                         get: { member.volume },
@@ -115,20 +85,70 @@ struct MemberRow: View {
                     ),
                     in: 0...1
                 )
-                .tint(Theme.accent)
                 .disabled(member.isMutedByMe)
-                Image(systemName: "speaker.wave.3.fill").font(.caption2).foregroundStyle(.tertiary)
+                Image(systemName: "speaker.wave.3.fill")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textFaint)
             }
-            .opacity(member.isMutedByMe ? 0.35 : 1)
+            .opacity(member.isMutedByMe ? 0.4 : 1)
         }
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isPrivate || theyOpenedPrivate ? Theme.warning.opacity(0.12) : .clear)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        // onPressingChanged fires on touch-down rather than after the minimum
+        // duration, so binding the line to it opened a private channel on every
+        // stray tap and every scroll that began on a row.
+        .gesture(
+            LongPressGesture(minimumDuration: 0.28)
+                .onEnded { _ in
+                    holding = true
+                    session.beginPrivateLine(to: member)
+                }
+                .sequenced(before: DragGesture(minimumDistance: 0))
+                .onEnded { _ in
+                    holding = false
+                    session.endPrivateLine()
+                }
         )
-        .scaleEffect(holding ? 0.985 : 1)
-        .animation(.easeOut(duration: 0.12), value: holding)
-        .animation(.easeInOut(duration: 0.18), value: isPrivate)
-        .animation(.easeInOut(duration: 0.18), value: theyOpenedPrivate)
+        .onDisappear {
+            if holding { holding = false; session.endPrivateLine() }
+        }
+        .listRowBackground(
+            isPrivate || theyOpenedPrivate
+                ? Theme.warning.opacity(0.12)
+                : Color(.secondarySystemGroupedBackground)
+        )
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: member.isMutedByMe ? .cancel : .destructive) {
+                session.setMuted(!member.isMutedByMe, for: member)
+                Haptics.selection()
+            } label: {
+                Label(member.isMutedByMe ? "Unmute" : "Mute",
+                      systemImage: member.isMutedByMe ? "speaker.wave.2" : "speaker.slash")
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isPrivate)
+        .animation(.easeInOut(duration: 0.2), value: theyOpenedPrivate)
+    }
+
+    private var symbol: String {
+        if isPrivate || theyOpenedPrivate { return "person.wave.2.fill" }
+        if member.isMutedByMe             { return "speaker.slash.fill" }
+        if member.isSpeaking              { return "waveform" }
+        return "person.fill"
+    }
+
+    private var symbolColour: Color {
+        if isPrivate || theyOpenedPrivate { return Theme.warning }
+        if member.isMutedByMe             { return Theme.muted }
+        if member.isSpeaking              { return Theme.live }
+        return Theme.textFaint
+    }
+
+    private var detail: String? {
+        if isPrivate         { return "Direct line — holding" }
+        if theyOpenedPrivate { return "Direct line to you" }
+        if member.isMutedByMe { return "Muted" }
+        if member.isSpeaking  { return "Speaking" }
+        return nil
     }
 }

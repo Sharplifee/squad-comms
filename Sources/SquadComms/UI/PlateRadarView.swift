@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// The radar, drawn as a barbell seen end-on.
+/// Who is near you, and how near.
 ///
-/// The range rings are not decorative circles at even percentages — they are
-/// competition plates in real loading order, heaviest closest to the collar.
-/// Red 25kg sits nearest you, then blue 20, yellow 15, green 10 furthest out.
-/// A lifter reads distance bands the same way they read a loaded bar across
-/// the gym floor, so the rings carry meaning instead of decoration.
+/// Modelled on Find My rather than on a radar screen: concentric hairline
+/// rings, no fill, no sweep arm, no colour coding by band. A rotating sweep and
+/// coloured rings look like surveillance equipment; this is four people in a
+/// gym. Distance is carried by position and by how solid a dot is, which is all
+/// the information there actually is.
 struct PlateRadarView: View {
 
     let contacts: [ProximityEngine.Contact]
@@ -14,133 +14,107 @@ struct PlateRadarView: View {
     let speakingID: UUID?
     let isScanning: Bool
 
-    @State private var sweep: Double = 0
+    @State private var pulse = false
 
     var body: some View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
-            let radius = side / 2 - 20
+            let radius = side / 2 - 28
 
             ZStack {
-                plates(radius: radius)
-                if isScanning { sweepArm(radius: radius) }
-                ForEach(contacts) { c in
-                    dot(for: c, radius: radius)
+                rings(radius: radius)
+                ForEach(contacts) { contact in
+                    dot(for: contact, radius: radius)
                 }
-                collar
+                centre
             }
             .frame(width: side, height: side)
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
         .aspectRatio(1, contentMode: .fit)
-        .onAppear {
-            withAnimation(.linear(duration: 3.2).repeatForever(autoreverses: false)) {
-                sweep = 360
-            }
-        }
+        .onAppear { pulse = true }
     }
 
-    // MARK: - Plates
+    // MARK: - Rings
 
-    private func plates(radius: CGFloat) -> some View {
-        ForEach(Array(Theme.bands.enumerated().reversed()), id: \.offset) { index, colour in
-            let fraction = CGFloat(index + 1) / CGFloat(Theme.bands.count)
-            let r = radius * fraction
-
-            ZStack {
-                Circle()
-                    .fill(colour.opacity(0.10))
-                    .frame(width: r * 2, height: r * 2)
-                Circle()
-                    .stroke(colour.opacity(0.62), lineWidth: 2.5)
-                    .frame(width: r * 2, height: r * 2)
-                Text("\(Theme.bandWeights[index])kg")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(colour.opacity(0.85))
-                    .offset(y: -r + 13)
-            }
-        }
-    }
-
-    // MARK: - Sweep
-
-    private func sweepArm(radius: CGFloat) -> some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [Theme.text.opacity(0.30), Theme.text.opacity(0)],
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
-            .frame(width: 2.5, height: radius)
-            .offset(y: -radius / 2)
-            .rotationEffect(.degrees(sweep))
-    }
-
-    // MARK: - Contacts
-
-    private func dot(for c: ProximityEngine.Contact, radius: CGFloat) -> some View {
-        // Angle is derived from the identifier so a person holds their bearing
-        // between frames. Distance is the only thing that moves them.
-        let angle = Double(abs(c.id.hashValue) % 360) * .pi / 180
-        let r = radius * c.normalised
-        let x = cos(angle) * r
-        let y = sin(angle) * r
-        let colour = Theme.color(for: c.normalised)
-        let speaking = c.id == speakingID
-
-        return ZStack {
-            if speaking {
-                Circle()
-                    .stroke(colour, lineWidth: 2)
-                    .frame(width: 34, height: 34)
-                    .opacity(0.5)
-                    .scaleEffect(speaking ? 1.25 : 1.0)
-                    .animation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true),
-                               value: speaking)
-            }
+    private func rings(radius: CGFloat) -> some View {
+        ForEach(0..<4, id: \.self) { index in
+            let fraction = CGFloat(index + 1) / 4
             Circle()
-                .fill(colour)
-                .frame(width: 15, height: 15)
-            Text((names[c.id] ?? "—").uppercased())
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(Theme.text)
-                .fixedSize()
-                .offset(y: -19)
+                .strokeBorder(Theme.hairline, lineWidth: 0.5)
+                .frame(width: radius * 2 * fraction, height: radius * 2 * fraction)
         }
-        .offset(x: x, y: y)
+    }
+
+    // MARK: - People
+
+    private func dot(for contact: ProximityEngine.Contact, radius: CGFloat) -> some View {
+        // Bearing is derived from the identifier so a person keeps their place
+        // between frames; only their distance from the centre moves.
+        let angle = Double(abs(contact.id.hashValue) % 360) * .pi / 180
+        let r = radius * contact.normalised
+        let speaking = contact.id == speakingID
+        let name = names[contact.id]
+
+        return VStack(spacing: 5) {
+            ZStack {
+                if speaking {
+                    Circle()
+                        .fill(Theme.live.opacity(0.25))
+                        .frame(width: 40, height: 40)
+                        .scaleEffect(pulse ? 1.15 : 0.85)
+                        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                                   value: pulse)
+                }
+                Circle()
+                    .fill(speaking ? Theme.live : Theme.accent)
+                    .frame(width: 12, height: 12)
+                    // Further away reads fainter. No hue change, because
+                    // distance is a single continuous quantity.
+                    .opacity(speaking ? 1 : 1 - contact.normalised * 0.45)
+            }
+
+            if let name {
+                Text(name)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .offset(x: cos(angle) * r, y: sin(angle) * r)
+        .animation(.easeInOut(duration: 0.6), value: contact.normalised)
     }
 
     // MARK: - You
 
-    private var collar: some View {
-        ZStack {
-            Circle().fill(Theme.text).frame(width: 14, height: 14)
-            Circle().stroke(Theme.text.opacity(0.30), lineWidth: 1.5)
-                .frame(width: 24, height: 24)
-        }
+    private var centre: some View {
+        Circle()
+            .fill(Theme.text)
+            .frame(width: 10, height: 10)
+            .overlay(
+                Circle()
+                    .strokeBorder(Theme.background, lineWidth: 2)
+            )
     }
 }
 
-/// The range control, phrased as loading a bar rather than setting a radius.
+/// Range control. A plain stepper-free slider with the current value stated in
+/// words above it — the same pattern Settings uses for text size.
 struct RangeLoaderView: View {
     @Binding var index: Int
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
+        VStack(spacing: 6) {
+            HStack {
+                Text("Range")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textDim)
+                Spacer()
                 Text(ProximityEngine.rangeLabels[index])
-                    .font(.system(size: 22, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Theme.text)
-                if index < ProximityEngine.rangeLabels.count - 1 {
-                    Text("LOADED")
-                        .font(.system(size: 10, design: .monospaced))
-                        .tracking(1.4)
-                        .foregroundStyle(Theme.textFaint)
-                }
+                    .font(.subheadline.weight(.medium))
+                    .monospacedDigit()
             }
-
             Slider(
                 value: Binding(
                     get: { Double(index) },
@@ -149,7 +123,6 @@ struct RangeLoaderView: View {
                 in: 0...Double(ProximityEngine.rangeLabels.count - 1),
                 step: 1
             )
-            .tint(Theme.accent)
         }
     }
 }
