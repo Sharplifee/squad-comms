@@ -100,6 +100,23 @@ final class SessionManager: ObservableObject {
 
     func reset() { state = .idle }
 
+    /// Tear the room down and rejoin the same squad.
+    ///
+    /// LiveKit reconnects on its own for ordinary drops, but it cannot recover
+    /// from a session whose token has expired or whose room was closed
+    /// server-side — those look identical from the app and leave you connected
+    /// to nothing. This is the manual escape hatch behind Status.
+    func reconnectIfNeeded() async {
+        guard let squad else { return }
+        await room.disconnect()
+        state = .connecting
+        do {
+            try await connect(to: squad)
+        } catch {
+            state = .failed(friendly(error))
+        }
+    }
+
     /// Open the line without asking anything.
     ///
     /// A code screen on an always-on audio app is a contradiction: it puts a
