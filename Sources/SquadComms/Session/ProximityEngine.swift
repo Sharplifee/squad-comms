@@ -30,6 +30,10 @@ final class ProximityEngine: NSObject, ObservableObject {
     /// floor, and that is the case this app exists for.
     static let rangeLabels  = ["100 FT", "250 FT", "500 FT", "0.25 MI", "1 MI",
                                "5 MI", "25 MI", "100 MI", "ANYWHERE"]
+    /// Short forms for the tick row under the slider.
+    static let rangeTicks = ["100ft", "250ft", "500ft", ".25mi", "1mi",
+                             "5mi", "25mi", "100mi", "∞"]
+
     static let rangeMetres: [Double] = [30.5, 76.2, 152.4, 402.3, 1609.3,
                                         8046.7, 40233.6, 160934.4, 9_999_999]
 

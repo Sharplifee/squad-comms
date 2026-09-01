@@ -133,30 +133,67 @@ struct PlateRadarView: View {
     }
 }
 
-/// Range control. A plain stepper-free slider with the current value stated in
-/// words above it — the same pattern Settings uses for text size.
+/// Range control, as a pill that opens the slider rather than a slider that is
+/// always sitting there.
+///
+/// Range is set once and then left alone for the whole session, so a permanent
+/// slider spends its life taking up space next to the radar for a control
+/// nobody is touching. Collapsed it reads as a value; expanded it is a control.
 struct RangeLoaderView: View {
     @Binding var index: Int
+    @State private var expanded = false
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack {
-                Text("Range")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.textDim)
-                Spacer()
-                Text(ProximityEngine.rangeLabels[index])
-                    .font(.subheadline.weight(.medium))
-                    .monospacedDigit()
+        VStack(spacing: 12) {
+            Button {
+                withAnimation(.snappy(duration: 0.22)) { expanded.toggle() }
+                Haptics.selection()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.caption)
+                    Text(ProximityEngine.rangeLabels[index])
+                        .font(.subheadline.weight(.medium))
+                        .monospacedDigit()
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
+                        .rotationEffect(.degrees(expanded ? 180 : 0))
+                    Spacer()
+                    if !expanded {
+                        Text("Range")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.textDim)
+                    }
+                }
             }
-            Slider(
-                value: Binding(
-                    get: { Double(index) },
-                    set: { index = Int($0.rounded()) }
-                ),
-                in: 0...Double(ProximityEngine.rangeLabels.count - 1),
-                step: 1
-            )
+            .buttonStyle(.plain)
+
+            if expanded {
+                VStack(spacing: 6) {
+                    Slider(
+                        value: Binding(
+                            get: { Double(index) },
+                            set: { index = Int($0.rounded()) }
+                        ),
+                        in: 0...Double(ProximityEngine.rangeLabels.count - 1),
+                        step: 1
+                    )
+
+                    // Every stop labelled, so you can see where you are on a
+                    // scale that is logarithmic and would otherwise feel
+                    // arbitrary.
+                    HStack {
+                        ForEach(Array(ProximityEngine.rangeTicks.enumerated()), id: \.offset) { offset, tick in
+                            Text(tick)
+                                .font(.system(size: 8))
+                                .foregroundStyle(offset == index ? Theme.accent : Theme.textFaint)
+                            if offset < ProximityEngine.rangeTicks.count - 1 { Spacer(minLength: 0) }
+                        }
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
+        .padding(.vertical, 2)
     }
 }
