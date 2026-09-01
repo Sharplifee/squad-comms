@@ -42,6 +42,46 @@ struct Backend {
         return squad
     }
 
+    // MARK: - Contacts
+
+    struct ContactRow: Decodable {
+        let phoneHash: String
+        let displayName: String
+        let lastSeenAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case phoneHash   = "phone_hash"
+            case displayName = "display_name"
+            case lastSeenAt  = "last_seen_at"
+        }
+    }
+
+    /// Ask which of these hashes belong to somebody with the app. Only hashes
+    /// cross the wire — see ContactMatcher for why that is the whole design.
+    func matchContacts(hashes: [String]) async throws -> [ContactRow] {
+        guard let client else { throw BackendError.notConfigured }
+        return try await client
+            .rpc("match_contacts", params: ["p_hashes": hashes])
+            .execute()
+            .value
+    }
+
+    func registerDevice(deviceID: String, displayName: String,
+                        phoneHash: String?, ghost: Bool) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct Params: Encodable {
+            let p_device_id: String
+            let p_display_name: String
+            let p_phone_hash: String?
+            let p_ghost: Bool
+            let p_identity: String
+        }
+        _ = try await client.rpc("register_device", params: Params(
+            p_device_id: deviceID, p_display_name: displayName,
+            p_phone_hash: phoneHash, p_ghost: ghost, p_identity: deviceID
+        )).execute()
+    }
+
     func squad(forCode code: String) async throws -> Squad {
         guard let client else { throw BackendError.notConfigured }
         let rows: [Squad] = try await client.from("squads")

@@ -39,7 +39,8 @@ final class SessionManager: ObservableObject {
     var onRemoteSpeech: ((Bool) -> Void)?
 
     private let room = Room()
-    private let backend = Backend()
+    /// Exposed so ContactsView can run hash matching through the same client.
+    let backend = Backend()
     /// Exposed so the radar can read live distances and drive the range control.
     let proximity = ProximityEngine()
     private var proximityCancellable: AnyCancellable?

@@ -1,0 +1,164 @@
+import SwiftUI
+import Contacts
+
+/// Who you already know that has the app.
+///
+/// The point is to remove the step where you have to ask someone whether they
+/// have it. If they do, they show up here with your name for them and you send
+/// them your code in one tap.
+struct ContactsView: View {
+    @EnvironmentObject private var session: SessionManager
+    @StateObject private var matcher: ContactMatcher
+
+    init(backend: Backend) {
+        _matcher = StateObject(wrappedValue: ContactMatcher(backend: backend))
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                switch matcher.permission {
+                case .authorized, .limited:
+                    matchedSection
+                    privacySection
+                case .denied, .restricted:
+                    deniedSection
+                default:
+                    askSection
+                }
+            }
+            .navigationTitle("Contacts")
+            .refreshable { await matcher.scan() }
+            .task {
+                if matcher.permission == .authorized || matcher.permission == .limited {
+                    await matcher.scan()
+                }
+            }
+        }
+    }
+
+    // MARK: - Sections
+
+    @ViewBuilder
+    private var matchedSection: some View {
+        if matcher.isScanning && matcher.matches.isEmpty {
+            Section {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Checking your contacts…")
+                        .foregroundStyle(Theme.textDim)
+                }
+            }
+        } else if matcher.matches.isEmpty {
+            Section {
+                ContentUnavailableView(
+                    "Nobody yet",
+                    systemImage: "person.crop.circle.badge.questionmark",
+                    description: Text("None of your \(matcher.totalScanned) contacts have Squadstream. Send someone your code and they'll show up here once they're on.")
+                )
+                .listRowBackground(Color.clear)
+            }
+        } else {
+            Section {
+                ForEach(matcher.matches) { match in
+                    ContactRowView(match: match, code: session.squad?.joinCode)
+                }
+            } header: {
+                Text("^[\(matcher.matches.count) contact](inflect: true) already on")
+            }
+        }
+    }
+
+    private var privacySection: some View {
+        Section {
+            Label {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Your contacts stay on your phone")
+                        .font(.subheadline)
+                    Text("Numbers are scrambled on the device before anything is sent, and only the scrambled version is compared. Nothing readable ever leaves.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textDim)
+                }
+            } icon: {
+                Image(systemName: "lock.shield").foregroundStyle(Theme.live)
+            }
+        }
+    }
+
+    private var askSection: some View {
+        Section {
+            ContentUnavailableView {
+                Label("Find your squad", systemImage: "person.2.badge.key")
+            } description: {
+                Text("See which of your contacts already have Squadstream. Numbers are scrambled on your phone first — nothing readable is sent.")
+            } actions: {
+                Button("Check my contacts") {
+                    Task { await matcher.requestAccessAndScan() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .listRowBackground(Color.clear)
+        }
+    }
+
+    private var deniedSection: some View {
+        Section {
+            ContentUnavailableView {
+                Label("Contacts are off", systemImage: "lock")
+            } description: {
+                Text("Turn on Contacts for Squadstream in Settings to see who already has it.")
+            } actions: {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+            .listRowBackground(Color.clear)
+        }
+    }
+}
+
+private struct ContactRowView: View {
+    let match: ContactMatcher.Match
+    let code: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(initials)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Theme.textDim)
+                .frame(width: 38, height: 38)
+                .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(match.contactName)
+                // They may have typed a different name into the app. Showing it
+                // avoids the confusion of a code arriving from a name you do
+                // not recognise on the other end.
+                if match.appName != match.contactName {
+                    Text("Goes by \(match.appName)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textDim)
+                }
+            }
+
+            Spacer()
+
+            if let code {
+                ShareLink(item: "Join my squad on Squadstream — code \(code)") {
+                    Text("Invite").font(.subheadline)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var initials: String {
+        let parts = match.contactName.split(separator: " ")
+        return String(parts.prefix(2).compactMap(\.first)).uppercased()
+    }
+}

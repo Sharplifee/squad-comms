@@ -21,6 +21,9 @@ struct MainTabView: View {
                     .tabItem { Label("Squad", systemImage: "person.2") }
                     .badge(session.members.count)
 
+                ContactsView(backend: session.backend)
+                    .tabItem { Label("Contacts", systemImage: "person.crop.circle") }
+
                 AudioTabView()
                     .tabItem { Label("Audio", systemImage: "slider.horizontal.3") }
 
