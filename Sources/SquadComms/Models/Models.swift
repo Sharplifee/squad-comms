@@ -39,6 +39,11 @@ struct Member: Codable, Identifiable, Hashable {
     var displayName: String
     var isSpeaking: Bool = false
     var isMutedByMe: Bool = false
+    /// Whether THEY can hear YOU. Independent of whether you can hear them —
+    /// the two directions are genuinely separate needs. Wanting to listen to
+    /// somebody without them hearing your breathing is normal; so is talking to
+    /// someone whose mic is picking up a leaf blower you have muted.
+    var isMutedToThem: Bool = false
     var volume: Double = 1.0      // 0...1, per-listener, local only
     var nearby: Bool = false      // CoreBluetooth RSSI signal
 }
@@ -108,6 +113,9 @@ struct Preferences: Codable, Equatable {
     var noiseSuppression: NoiseSuppression = .standard
 
     // Presence
+    /// List gives you the sliders; tiles give you faces you can read across a
+    /// room. Persisted because it is a standing preference, not a mode.
+    var squadViewIsList: Bool = false
     var ghostMode: Bool = false
     var privateSession: Bool = false
     var duckBehavior: DuckBehavior = .duck

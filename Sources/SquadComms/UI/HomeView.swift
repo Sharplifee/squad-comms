@@ -36,6 +36,8 @@ struct HomeView: View {
 
                 Section { MicCard() }
 
+                if session.squad != nil { nearbySection }
+
                 presenceSection
 
                 if !session.members.isEmpty {
@@ -116,6 +118,54 @@ struct HomeView: View {
                 session.applyPreferences()
             }
         }
+    }
+
+    // MARK: - Nearby
+
+    /// Devices the radar can see, whether or not they are on your line.
+    ///
+    /// Distance is the useful part: it tells you if the person you are talking
+    /// to is across the floor or standing behind you, which changes whether you
+    /// use the app at all.
+    private var nearbySection: some View {
+        Section {
+            if session.proximity.contacts.isEmpty {
+                Text(session.proximity.isScanning
+                     ? "Nothing in range yet"
+                     : "Bluetooth is off")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textDim)
+            } else {
+                ForEach(session.proximity.contacts) { contact in
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(Theme.color(for: contact.normalised))
+                            .frame(width: 8, height: 8)
+                        Text(name(for: contact.id))
+                        Spacer()
+                        Text(distance(contact.metres))
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.textDim)
+                            .monospacedDigit()
+                    }
+                }
+            }
+        } header: {
+            Text("Nearby")
+        } footer: {
+            Text("Bluetooth range. Someone can be on your line from anywhere — this is just who is physically close.")
+        }
+    }
+
+    private func name(for id: UUID) -> String {
+        session.members.first(where: { $0.id == id })?.displayName ?? "Unknown device"
+    }
+
+    /// Feet below ~90 m, miles above. Nobody thinks in metres on a gym floor,
+    /// and nobody thinks in feet once it is a drive away.
+    private func distance(_ metres: Double) -> String {
+        if metres < 91 { return "\(Int((metres * 3.28084).rounded())) ft" }
+        return String(format: "%.1f mi", metres / 1609.34)
     }
 
     // MARK: - Presence

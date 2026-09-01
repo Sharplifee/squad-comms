@@ -14,6 +14,10 @@ final class SessionManager: ObservableObject {
         case speechEnd
         case privateLineOpened(to: UUID)
         case privateLineClosed(to: UUID)
+        /// Sender is telling one recipient to stop rendering their audio.
+        /// Enforced on the receiving side because LiveKit publishes one track
+        /// to the room — there is no per-listener mute at the source.
+        case routing(to: UUID, muted: Bool)
     }
 
     @Published private(set) var state: SessionState = .idle
@@ -236,6 +240,16 @@ final class SessionManager: ObservableObject {
         applyRemoteVolumes()
     }
 
+    /// Stop this person hearing you, without affecting whether you hear them.
+    ///
+    /// Implemented per-participant rather than by muting the mic, so everyone
+    /// else in the squad still hears you normally.
+    func setMutedToThem(_ muted: Bool, for member: Member) {
+        guard let index = members.firstIndex(where: { $0.id == member.id }) else { return }
+        members[index].isMutedToThem = muted
+        broadcast(.routing(to: member.id, muted: muted))
+    }
+
     func setMuted(_ muted: Bool, for member: Member) {
         guard let index = members.firstIndex(where: { $0.id == member.id }) else { return }
         members[index].isMutedByMe = muted
@@ -415,6 +429,15 @@ extension SessionManager: RoomDelegate {
                 return
             case .privateLineClosed(let target):
                 if target == selfParticipantID { endPrivateLine(from: id) }
+                return
+            case .routing(let target, let muted):
+                guard target == selfParticipantID else { return }
+                if let index = members.firstIndex(where: { $0.id == id }) {
+                    // They have muted themselves to us specifically. Drop their
+                    // gain rather than showing them as speaking to nobody.
+                    members[index].isMutedByMe = muted
+                    applyRemoteVolumes()
+                }
                 return
             case .speechStart, .speechEnd:
                 break
