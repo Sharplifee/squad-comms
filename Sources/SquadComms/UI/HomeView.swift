@@ -76,20 +76,25 @@ struct HomeView: View {
     private var radarSection: some View {
         Group {
             Section {
-                // Beyond 100 miles the rings say nothing — everybody pins to
-                // the outer edge — so the radar hands over to a map.
-                if session.proximity.rangeIndex >= 7 {
-                    ContinentalView(members: session.members)
-                } else {
-                    PlateRadarView(
-                    contacts: session.proximity.contacts,
-                    rangeIndex: session.proximity.rangeIndex,
-                    names: Dictionary(uniqueKeysWithValues: session.members.map { ($0.id, $0.displayName) }),
-                    speakingID: session.members.first(where: { $0.isSpeaking })?.id,
-                    isScanning: session.proximity.isScanning
-                )
-                .frame(maxWidth: .infinity)
-                .frame(maxHeight: 300)
+                // List row modifiers must sit on one view, not on the branches
+                // of an if/else — Group collapses the two cases into a single
+                // view so the insets apply to whichever is showing.
+                Group {
+                    // Beyond 100 miles the rings say nothing, because everybody
+                    // pins to the outer edge — so the radar hands to a map.
+                    if session.proximity.rangeIndex >= 7 {
+                        ContinentalView(members: session.members)
+                    } else {
+                        PlateRadarView(
+                            contacts: session.proximity.contacts,
+                            rangeIndex: session.proximity.rangeIndex,
+                            names: Dictionary(uniqueKeysWithValues: session.members.map { ($0.id, $0.displayName) }),
+                            speakingID: session.members.first(where: { $0.isSpeaking })?.id,
+                            isScanning: session.proximity.isScanning
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: 300)
+                    }
                 }
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
                 .listRowBackground(Color.clear)
