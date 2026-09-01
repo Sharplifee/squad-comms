@@ -376,6 +376,10 @@ final class SessionManager: ObservableObject {
         let mustArrive: Bool
         switch event {
         case .privateLineOpened, .privateLineClosed: mustArrive = true
+        // Routing is a latch, not a stream — nothing follows it to correct a
+        // drop, so a lost message would leave somebody muted or unmuted
+        // against their intent with no way to notice.
+        case .routing:                               mustArrive = true
         case .speechStart, .speechEnd:               mustArrive = false
         }
         Task {
