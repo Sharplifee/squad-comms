@@ -12,6 +12,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showJoin = false
     @State private var copied = false
+    @State private var showStart = false
     @State private var prefs = PreferencesStore.shared.current
 
     var body: some View {
@@ -21,8 +22,10 @@ struct HomeView: View {
                     Section { privateLineRow(from) }
                 }
 
-                if session.members.isEmpty {
-                    inviteSection
+                if session.squad == nil {
+                    idleSection
+                } else if session.members.isEmpty {
+                    liveCodeSection
                 } else {
                     radarSection
                     Section { ParticipantGrid(members: session.members) }
@@ -54,8 +57,15 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showJoin) { SwitchSquadSheet() }
+            .sheet(isPresented: $showStart) { StartLineSheet() }
         }
-        .task { await audio.startListening() }
+        // Listening holds the microphone and takes the audio session live, so
+        // it must not start merely because the app is open — that is what made
+        // music sound distant the moment you launched.
+        .task(id: session.squad?.id) {
+            if session.squad != nil { await audio.startListening() }
+            else { audio.stopListening() }
+        }
         .onDisappear { audio.stopListening() }
     }
 
@@ -193,42 +203,58 @@ struct HomeView: View {
 
     // MARK: - Invite
 
-    private var inviteSection: some View {
-        Section {
-            if let code = session.squad?.joinCode {
-                VStack(spacing: 10) {
-                    Text(code)
-                        .font(.system(size: 44, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .kerning(4)
-                    Text("Your squad code — you chose this")
-                        .font(.footnote).foregroundStyle(Theme.textDim)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .listRowBackground(Color.clear)
+    // MARK: - Idle
 
-                ShareLink(item: "Join my squad on Squadstream — code \(code)\n\nhttps://testflight.apple.com/join/fXWm1aq2") {
-                    Label("Send an invite", systemImage: "square.and.arrow.up")
-                }
-                Button {
-                    UIPasteboard.general.string = code
-                    Haptics.selection()
-                    copied = true
-                } label: {
-                    Label(copied ? "Copied" : "Copy code",
-                          systemImage: copied ? "checkmark" : "doc.on.doc")
-                }
-                Button { showJoin = true } label: {
-                    Label("Switch to another code", systemImage: "arrow.right.circle")
-                }
+    /// Nothing is open. No code exists yet, because a code is created when you
+    /// start a line — showing one before that is showing a session that does
+    /// not exist.
+    private var idleSection: some View {
+        Section {
+            Button {
+                showStart = true
+            } label: {
+                Label("Open a line", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
             }
-        } header: {
-            Text("You're the only one on")
+            .buttonStyle(.borderedProminent)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowBackground(Color.clear)
+
+            Button {
+                showJoin = true
+            } label: {
+                Label("Join with a code", systemImage: "arrow.right.circle")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.bordered)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 6, trailing: 16))
+            .listRowBackground(Color.clear)
         } footer: {
-            Text("They install Squadstream, type this same code, and they're on. Whoever opens it first creates it — there's no host and no invite to accept.")
+            Text("Your music is untouched until a line is open.")
         }
     }
+
+    /// The code, once a line exists. Small — it is a reference, not the hero.
+    private var liveCodeSection: some View {
+        Section {
+            if let code = session.squad?.joinCode {
+                HStack {
+                    Text("Code")
+                    Spacer()
+                    Text(code)
+                        .font(.body.monospaced())
+                        .foregroundStyle(Theme.textDim)
+                }
+                ShareLink(item: "Join my squad on Squadstream — code \(code)") {
+                    Label("Share code", systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+    }
+
 }
 
 /// Entering a code is a deliberate choice from inside a working app, not the
@@ -262,6 +288,68 @@ struct SwitchSquadSheet: View {
                 }
             }
             .navigationTitle("Switch code")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium])
+        .onAppear { focused = true }
+    }
+}
+
+/// Starting a line. You choose the code here — it does not exist until now.
+struct StartLineSheet: View {
+    @EnvironmentObject private var session: SessionManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var code = ""
+    @State private var working = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 18) {
+                Text("Pick a code for your line")
+                    .font(.headline)
+                Text("Anything from 3 to 8 digits. Whoever types the same one lands with you.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textDim)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+
+                TextField("742", text: $code)
+                    .keyboardType(.numberPad)
+                    .font(.system(size: 44, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .kerning(5)
+                    .multilineTextAlignment(.center)
+                    .focused($focused)
+                    .onChange(of: code) { _, new in
+                        code = String(new.filter(\.isNumber).prefix(8))
+                    }
+
+                Button {
+                    working = true
+                    Task {
+                        await session.joinOrCreate(code: code)
+                        working = false
+                        dismiss()
+                    }
+                } label: {
+                    Group {
+                        if working { ProgressView().tint(.white) }
+                        else { Text("Open the line").font(.headline) }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(code.count < 3 || working)
+                .padding(.horizontal, 24)
+
+                Spacer()
+            }
+            .padding(.top, 26)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

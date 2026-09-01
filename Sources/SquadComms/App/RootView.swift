@@ -18,47 +18,21 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.25), value: onboarded)
     }
 
+    /// The app opens on the dashboard. Always.
+    ///
+    /// It used to call openLine() on appear, which meant launch was a spinner
+    /// while a squad was created or rejoined before anything was usable. There
+    /// is no reason to hold a line open before somebody asks for one — opening
+    /// the app is not the same as starting a session.
     private var connected: some View {
         Group {
             switch session.state {
-            case .idle:                 OpeningView()
-            case .needsCode:            CodeEntryView()
             case .connecting:           ConnectingView()
-            case .connected:            MainTabView()
             case .failed(let message):  FailureView(message: message)
+            default:                    MainTabView()
             }
         }
         .animation(.easeInOut(duration: 0.25), value: session.state)
-        .task { await session.openLine() }
-    }
-}
-
-/// Shown for the moment between launch and the line being up. Deliberately
-/// not a form — there is nothing here for anyone to fill in.
-struct OpeningView: View {
-    var body: some View {
-        VStack(spacing: 14) {
-            Text("squad comms")
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.text)
-            Text("Opening the line")
-                .font(.callout)
-                .foregroundStyle(Theme.textDim)
-            ProgressView().controlSize(.small).padding(.top, 4)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.background)
-    }
-}
-
-struct ConnectingView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            ProgressView().controlSize(.large)
-            Text("Opening the line").font(.callout).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.background)
     }
 }
 

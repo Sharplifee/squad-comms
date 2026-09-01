@@ -14,19 +14,19 @@ import Combine
 ///    partner spoke was the moment the audio glitched. That is the "tacky dual
 ///    output" sound, and it was self-inflicted.
 ///
-/// 2. **`.duckOthers` is set from the start, not toggled.** It is the only
-///    mechanism iOS provides to lower another app's volume, and it is
-///    implemented below the app layer in the audio HAL — the ramp is smooth and
-///    sample-accurate. Critically it only engages while we are actually
-///    rendering audio, which is precisely when somebody is speaking. So leaving
-///    it on permanently produces exactly the behaviour we want with zero
-///    runtime reconfiguration.
+/// 2. **The session is not activated until a line is actually open, and
+///    `.duckOthers` is engaged only while somebody is speaking.** Both of
+///    those were wrong before. The session went active at launch and
+///    `.duckOthers` was permanent, so simply opening the app pushed your music
+///    down and held it there — which is what made it sound like a third-party
+///    app playing in the distance instead of your primary audio.
 ///
-/// The v1 failure that killed music was `.duckOthers` combined with
+/// The v1 failure that killed music outright was `.duckOthers` combined with
 /// `.voiceChat` mode. `.voiceChat` forces a telephony signal path — mono, band
 /// limited, aggressive AGC — and everything routed through it, including the
-/// music, comes out thin and compressed. That mode is the problem, not the
-/// ducking.
+/// music, comes out thin. On headphones there is no echo to cancel, so that
+/// mode is not needed and is not used.
+///
 @MainActor
 final class AudioSessionController: ObservableObject {
 
@@ -56,8 +56,10 @@ final class AudioSessionController: ObservableObject {
         try session.setPreferredSampleRate(preferredSampleRate)
         try session.setPreferredIOBufferDuration(preferredBufferDuration)
         try applyCategory(for: currentRouteIsHeadphones())
-        try session.setActive(true, options: [])
-
+        // Deliberately NOT activated here. An active .playAndRecord session
+        // holds the microphone and changes the output route, both of which
+        // degrade whatever is already playing — for no benefit until there is
+        // actually somebody on the line.
         configured = true
         updateRouteState()
         observeRouteChanges()
@@ -69,6 +71,12 @@ final class AudioSessionController: ObservableObject {
     func reapplyMode() {
         guard configured else { return }
         try? applyCategory(for: usingHeadphones)
+    }
+
+    /// Take the session live. Called when a squad connects, not at launch.
+    func activate() throws {
+        guard configured else { try configure(); return }
+        try session.setActive(true, options: [])
     }
 
     func deactivate() {
@@ -90,6 +98,41 @@ final class AudioSessionController: ObservableObject {
     /// the squad hears themselves back. We accept the telephony path in that
     /// case because feedback is worse than thin audio, and nobody uses this app
     /// on speaker for long.
+    /// Whether the system is currently ducking other apps.
+    private(set) var ducking = false
+
+    /// `.duckOthers` must NOT be permanent.
+    ///
+    /// It ducks the moment our session is active, not the moment we render
+    /// audio — so leaving it on meant music was pushed down and back the entire
+    /// time the app was open. That is the "sounds like a third-party app in the
+    /// distance" problem exactly, and it was self-inflicted.
+    ///
+    /// `.defaultToSpeaker` is also gone. It forces output to the loudspeaker
+    /// even when headphones are attached, which is both wrong and a quality
+    /// loss.
+    private func baseOptions(ducking: Bool) -> AVAudioSession.CategoryOptions {
+        var options: AVAudioSession.CategoryOptions = [
+            .mixWithOthers,        // never seize the session from the music app
+            .allowBluetooth,
+            .allowBluetoothA2DP
+        ]
+        if ducking { options.insert(.duckOthers) }
+        return options
+    }
+
+    /// Engage or release the system duck.
+    ///
+    /// Toggling the category is not free, but it happens only at the edges of
+    /// speech — and at those exact moments a voice is either arriving or has
+    /// just stopped, which masks the transition. Leaving it on permanently to
+    /// avoid the toggle was the far worse trade.
+    func setDucking(_ active: Bool) {
+        guard configured, ducking != active else { return }
+        ducking = active
+        try? applyCategory(for: usingHeadphones)
+    }
+
     private func applyCategory(for headphones: Bool) throws {
         // Noise suppression is not a dial iOS exposes — it is a consequence of
         // the session mode, so the setting picks the mode rather than pretending
@@ -113,13 +156,7 @@ final class AudioSessionController: ObservableObject {
         try session.setCategory(
             .playAndRecord,
             mode: mode,
-            options: [
-                .mixWithOthers,      // never seize the session from the music app
-                .duckOthers,         // the only real ducking mechanism iOS offers
-                .allowBluetooth,
-                .allowBluetoothA2DP,
-                .defaultToSpeaker
-            ]
+            options: baseOptions(ducking: ducking)
         )
     }
 

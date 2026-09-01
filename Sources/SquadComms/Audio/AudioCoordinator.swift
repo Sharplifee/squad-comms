@@ -63,6 +63,8 @@ final class AudioCoordinator: ObservableObject {
             guard let self else { return }
             let prefs = PreferencesStore.shared.current
             if speaking {
+                // Engage the system duck only while they are actually talking.
+                self.audioSession.setDucking(prefs.duckBehavior == .duck)
                 self.ducking.beginDuck(behavior: prefs.duckBehavior, level: prefs.duckLevel)
                 // Foldback steps back while someone else has the floor,
                 // otherwise you are listening to yourself and them at once.
@@ -71,6 +73,7 @@ final class AudioCoordinator: ObservableObject {
             } else {
                 self.autoPauseWork?.cancel()
                 self.autoPauseWork = nil
+                self.audioSession.setDucking(false)
                 self.ducking.endDuck(behavior: prefs.duckBehavior,
                                      rewindSeconds: prefs.autoRewind ? prefs.rewindSeconds : 0)
                 self.selfMonitor.setSuppressed(false)
@@ -111,6 +114,8 @@ final class AudioCoordinator: ObservableObject {
             // Session is configured once here and never touched again while
             // audio is playing — see AudioSessionController.
             try audioSession.configure()
+            // Now there is a reason to hold the session: a line is open.
+            try audioSession.activate()
             // Buffers must be forwarded BEFORE the engine starts, or the first
             // utterance after launch is dropped.
             vad.onBuffer = { [weak self] buffer in
