@@ -10,6 +10,7 @@ import SwiftUI
 struct PlateRadarView: View {
 
     let contacts: [ProximityEngine.Contact]
+    let rangeIndex: Int
     let names: [UUID: String]
     let speakingID: UUID?
     let isScanning: Bool
@@ -38,12 +39,45 @@ struct PlateRadarView: View {
     // MARK: - Rings
 
     private func rings(radius: CGFloat) -> some View {
-        ForEach(0..<4, id: \.self) { index in
-            let fraction = CGFloat(index + 1) / 4
-            Circle()
-                .strokeBorder(Theme.hairline, lineWidth: 0.5)
-                .frame(width: radius * 2 * fraction, height: radius * 2 * fraction)
+        ZStack {
+            // Crosshairs and 45° diagonals. They cost nothing and they give the
+            // eye something to measure bearing against — without them a dot at
+            // two o'clock and one at three o'clock look identical.
+            Path { path in
+                path.move(to: CGPoint(x: -radius, y: 0)); path.addLine(to: CGPoint(x: radius, y: 0))
+                path.move(to: CGPoint(x: 0, y: -radius)); path.addLine(to: CGPoint(x: 0, y: radius))
+            }
+            .stroke(Theme.hairline.opacity(0.55), lineWidth: 0.5)
+
+            Path { path in
+                let d = radius * 0.707
+                path.move(to: CGPoint(x: -d, y: -d)); path.addLine(to: CGPoint(x: d, y: d))
+                path.move(to: CGPoint(x: d, y: -d)); path.addLine(to: CGPoint(x: -d, y: d))
+            }
+            .stroke(Theme.hairline.opacity(0.3), lineWidth: 0.5)
+
+            ForEach(0..<4, id: \.self) { index in
+                let fraction = CGFloat(index + 1) / 4
+                let r = radius * fraction
+                Circle()
+                    .strokeBorder(Theme.hairline, lineWidth: 0.5)
+                    .frame(width: r * 2, height: r * 2)
+
+                // What each ring actually means. A radar without distances is
+                // a decoration.
+                Text(ringLabel(fraction: Double(fraction)))
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(Theme.textFaint)
+                    .offset(y: -r + 9)
+            }
         }
+    }
+
+    /// Ring distance in the unit a person would actually use at that scale.
+    private func ringLabel(fraction: Double) -> String {
+        let metres = ProximityEngine.rangeMetres[rangeIndex] * fraction
+        if metres < 305 { return "\(Int((metres * 3.28084).rounded())) ft" }
+        return String(format: "%.1f mi", metres / 1609.34)
     }
 
     // MARK: - People

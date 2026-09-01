@@ -76,14 +76,21 @@ struct HomeView: View {
     private var radarSection: some View {
         Group {
             Section {
-                PlateRadarView(
+                // Beyond 100 miles the rings say nothing — everybody pins to
+                // the outer edge — so the radar hands over to a map.
+                if session.proximity.rangeIndex >= 7 {
+                    ContinentalView(members: session.members)
+                } else {
+                    PlateRadarView(
                     contacts: session.proximity.contacts,
+                    rangeIndex: session.proximity.rangeIndex,
                     names: Dictionary(uniqueKeysWithValues: session.members.map { ($0.id, $0.displayName) }),
                     speakingID: session.members.first(where: { $0.isSpeaking })?.id,
                     isScanning: session.proximity.isScanning
                 )
                 .frame(maxWidth: .infinity)
                 .frame(maxHeight: 300)
+                }
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 12, trailing: 16))
                 .listRowBackground(Color.clear)
             }
@@ -170,27 +177,48 @@ struct HomeView: View {
 
     // MARK: - Presence
 
+    /// Ghost and Private sit side by side because they are the same kind of
+    /// decision — who can find you — and reading them together is how you
+    /// understand either one.
     private var presenceSection: some View {
         Section {
-            Toggle(isOn: $prefs.ghostMode) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Ghost mode")
-                    Text("Nobody can see you on their radar.")
-                        .font(.caption).foregroundStyle(Theme.textDim)
-                }
+            HStack(spacing: 11) {
+                presenceCard(
+                    title: "GHOST MODE",
+                    detail: "Hide from other radars",
+                    isOn: $prefs.ghostMode
+                )
+                presenceCard(
+                    title: "PRIVATE",
+                    detail: "Code required to join",
+                    isOn: $prefs.privateSession
+                )
             }
-            Toggle(isOn: $prefs.privateSession) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Private squad")
-                    Text("Only people with your code can join.")
-                        .font(.caption).foregroundStyle(Theme.textDim)
-                }
-            }
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+            .listRowBackground(Color.clear)
         }
         .onChange(of: prefs) { _, new in
             PreferencesStore.shared.update { $0 = new }
             session.applyPresence()
         }
+    }
+
+    private func presenceCard(title: String, detail: String, isOn: Binding<Bool>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Theme.textDim)
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(Theme.textFaint)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: - Controls

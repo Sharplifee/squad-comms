@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 /// Postgres columns are snake_case. Without these CodingKeys the Swift
@@ -46,6 +47,16 @@ struct Member: Codable, Identifiable, Hashable {
     var isMutedToThem: Bool = false
     var volume: Double = 1.0      // 0...1, per-listener, local only
     var nearby: Bool = false      // CoreBluetooth RSSI signal
+
+    /// Only populated when somebody has opted into sharing a location. The
+    /// continental view needs it; nothing else does, so it stays optional.
+    var latitude: Double?
+    var longitude: Double?
+
+    var coordinate: CLLocationCoordinate2D? {
+        guard let latitude, let longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
 }
 
 /// What happens to your own media when someone in the squad talks.
