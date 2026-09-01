@@ -17,21 +17,23 @@ struct ContactsView: View {
     var body: some View {
         NavigationStack {
             List {
+                // .limited is iOS 18+, so it cannot be matched by name here.
+                // Anything that is neither denied nor undetermined means we
+                // have some level of access and should just try to read.
                 switch matcher.permission {
-                case .authorized, .limited:
+                case .denied, .restricted:  deniedSection
+                case .notDetermined:        askSection
+                default:
                     matchedSection
                     privacySection
-                case .denied, .restricted:
-                    deniedSection
-                default:
-                    askSection
                 }
             }
             .navigationTitle("Contacts")
             .refreshable { await matcher.scan() }
             .task {
-                if matcher.permission == .authorized || matcher.permission == .limited {
-                    await matcher.scan()
+                switch matcher.permission {
+                case .denied, .restricted, .notDetermined: break
+                default: await matcher.scan()
                 }
             }
         }
