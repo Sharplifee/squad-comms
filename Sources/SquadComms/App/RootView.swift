@@ -62,3 +62,20 @@ struct FailureView: View {
         .background(Theme.background)
     }
 }
+
+/// The brief moment between choosing a code and the room being live.
+///
+/// This only appears when you deliberately opened a line — never at launch,
+/// where the app goes straight to the dashboard.
+struct ConnectingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView().controlSize(.large)
+            Text("Opening the line")
+                .font(.callout)
+                .foregroundStyle(Theme.textDim)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background)
+    }
+}
