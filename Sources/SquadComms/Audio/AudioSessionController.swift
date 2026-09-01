@@ -63,6 +63,14 @@ final class AudioSessionController: ObservableObject {
         observeRouteChanges()
     }
 
+    /// Re-apply after the noise suppression setting changes. This is the one
+    /// case where reconfiguring mid-session is justified, because the user just
+    /// asked for it and is listening for the difference.
+    func reapplyMode() {
+        guard configured else { return }
+        try? applyCategory(for: usingHeadphones)
+    }
+
     func deactivate() {
         configured = false
         // .notifyOthersOnDeactivation tells the music app it can return to full
@@ -83,7 +91,23 @@ final class AudioSessionController: ObservableObject {
     /// case because feedback is worse than thin audio, and nobody uses this app
     /// on speaker for long.
     private func applyCategory(for headphones: Bool) throws {
-        let mode: AVAudioSession.Mode = headphones ? .default : .voiceChat
+        // Noise suppression is not a dial iOS exposes — it is a consequence of
+        // the session mode, so the setting picks the mode rather than pretending
+        // to be a continuous control.
+        //
+        //   off      → .default      full bandwidth, no processing
+        //   standard → .measurement  minimal processing, flat response
+        //   active   → .voiceChat    full AGC + noise suppression + AEC
+        //
+        // On the speaker the choice is overridden: .voiceChat is mandatory
+        // there or the mic hears the output and everyone gets feedback.
+        let requested: AVAudioSession.Mode
+        switch PreferencesStore.shared.current.noiseSuppression {
+        case .none:     requested = .default
+        case .standard: requested = .measurement
+        case .active:   requested = .voiceChat
+        }
+        let mode: AVAudioSession.Mode = headphones ? requested : .voiceChat
         currentMode = mode
 
         try session.setCategory(

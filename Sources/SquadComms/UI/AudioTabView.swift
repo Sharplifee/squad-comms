@@ -112,9 +112,15 @@ struct AudioTabView: View {
                 }
             }
             .navigationTitle("Audio")
-            .onChange(of: prefs) { _, new in
+            .onChange(of: prefs) { old, new in
                 PreferencesStore.shared.update { $0 = new }
                 session.applyPreferences()
+                if old.noiseSuppression != new.noiseSuppression {
+                    audio.audioSession.reapplyMode()
+                }
+                if old.selfMonitor != new.selfMonitor {
+                    audio.setSelfMonitorLevel(new.selfMonitor)
+                }
             }
         }
     }

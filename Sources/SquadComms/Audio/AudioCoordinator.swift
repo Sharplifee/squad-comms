@@ -16,6 +16,11 @@ final class AudioCoordinator: ObservableObject {
     private let vad = VADEngine()
     private let ducking = DuckingController()
     let audioSession = AudioSessionController()
+    private let selfMonitor = SelfMonitor()
+    /// Scheduled when a partner starts talking; fires only if they are still
+    /// talking N seconds later, which is the difference between a comment and
+    /// a conversation.
+    private var autoPauseWork: DispatchWorkItem?
     private let commands = CommandEngine()
     private weak var session: SessionManager?
     private var cancellables = Set<AnyCancellable>()
@@ -59,10 +64,39 @@ final class AudioCoordinator: ObservableObject {
             let prefs = PreferencesStore.shared.current
             if speaking {
                 self.ducking.beginDuck(behavior: prefs.duckBehavior, level: prefs.duckLevel)
+                // Foldback steps back while someone else has the floor,
+                // otherwise you are listening to yourself and them at once.
+                self.selfMonitor.setSuppressed(true)
+                self.scheduleAutoPause(prefs)
             } else {
-                self.ducking.endDuck(behavior: prefs.duckBehavior, rewindSeconds: prefs.rewindSeconds)
+                self.autoPauseWork?.cancel()
+                self.autoPauseWork = nil
+                self.ducking.endDuck(behavior: prefs.duckBehavior,
+                                     rewindSeconds: prefs.autoRewind ? prefs.rewindSeconds : 0)
+                self.selfMonitor.setSuppressed(false)
             }
         }
+    }
+
+    /// Ducking is right for a passing comment. A conversation that runs past
+    /// the threshold is not something you want playing underneath, so the
+    /// music stops entirely — but only once it is clearly a conversation.
+    private func scheduleAutoPause(_ prefs: Preferences) {
+        autoPauseWork?.cancel()
+        guard prefs.autoPause, prefs.duckBehavior == .duck else { return }
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            Log.audio.info("auto-pause: speech ran past threshold, stopping media")
+            self.ducking.beginDuck(behavior: .pause, level: 0)
+        }
+        autoPauseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + prefs.autoPauseSeconds, execute: work)
+    }
+
+    /// Live foldback level from the Audio tab; no restart required.
+    func setSelfMonitorLevel(_ level: Double) {
+        selfMonitor.level = Float(level)
     }
 
     func startListening() async {
@@ -83,6 +117,12 @@ final class AudioCoordinator: ObservableObject {
                 self?.commands.append(buffer)
             }
             try vad.start()
+
+            // Foldback: hear a little of yourself so you do not shout. Failing
+            // to start it must never take the voice channel down — it is a
+            // comfort feature, not the product.
+            selfMonitor.level = Float(PreferencesStore.shared.current.selfMonitor)
+            try? selfMonitor.start()
 
             // Voice commands were previously never started and never fed —
             // CommandEngine.start(on:) had no caller and the recognition
@@ -173,6 +213,7 @@ final class AudioCoordinator: ObservableObject {
                     // restart-after-a-phone-call silently fail.
                     self.commands.stop()
                     self.vad.stop()
+                    self.selfMonitor.stop()
                     self.ducking.yieldForInterruption()
                 case .ended:
                     Log.audio.info("interruption ENDED — restarting VAD and commands")
