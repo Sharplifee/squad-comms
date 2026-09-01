@@ -22,6 +22,7 @@ struct RootView: View {
         Group {
             switch session.state {
             case .idle:                 OpeningView()
+            case .needsCode:            CodeEntryView()
             case .connecting:           ConnectingView()
             case .connected:            MainTabView()
             case .failed(let message):  FailureView(message: message)

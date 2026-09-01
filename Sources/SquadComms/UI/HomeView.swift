@@ -201,7 +201,7 @@ struct HomeView: View {
                         .font(.system(size: 44, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .kerning(4)
-                    Text("Your squad code")
+                    Text("Your squad code — you chose this")
                         .font(.footnote).foregroundStyle(Theme.textDim)
                 }
                 .frame(maxWidth: .infinity)
@@ -220,13 +220,13 @@ struct HomeView: View {
                           systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
                 Button { showJoin = true } label: {
-                    Label("Enter someone else's code", systemImage: "arrow.right.circle")
+                    Label("Switch to another code", systemImage: "arrow.right.circle")
                 }
             }
         } header: {
             Text("You're the only one on")
         } footer: {
-            Text("They install Squadstream, type this code, and they're on. Nothing else to set up.")
+            Text("They install Squadstream, type this same code, and they're on. Whoever opens it first creates it — there's no host and no invite to accept.")
         }
     }
 }
@@ -243,23 +243,25 @@ struct SwitchSquadSheet: View {
         NavigationStack {
             List {
                 Section {
-                    TextField("000000", text: $code)
+                    TextField("742", text: $code)
                         .keyboardType(.numberPad)
                         .font(.title.monospaced())
                         .multilineTextAlignment(.center)
                         .focused($focused)
                         .onChange(of: code) { _, new in
-                            code = String(new.filter(\.isNumber).prefix(6))
-                            if code.count == 6 {
-                                Task { await session.join(code: code); dismiss() }
-                            }
+                            code = String(new.filter(\.isNumber).prefix(8))
+                        }
+                        .submitLabel(.go)
+                        .onSubmit {
+                            guard code.count >= 3 else { return }
+                            Task { await session.joinOrCreate(code: code); dismiss() }
                         }
                         .padding(.vertical, 8)
                 } footer: {
-                    Text("You'll leave your own line to join theirs.")
+                    Text("3 to 8 digits. You'll leave your current line. If nobody is on that code yet, you'll start it.")
                 }
             }
-            .navigationTitle("Join a squad")
+            .navigationTitle("Switch code")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

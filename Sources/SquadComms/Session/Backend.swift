@@ -17,18 +17,29 @@ struct Backend {
             switch self {
             case .notConfigured: return "Supabase isn't configured."
             case .codeNotFound:  return "No squad found with that code."
-            }
+}
         }
     }
 
-    func createSquad(name: String) async throws -> Squad {
+    /// - Parameter code: chosen by the person, never generated. A code you
+    ///   picked is one you can say out loud across a gym floor and the other
+    ///   person can type without looking; six random digits have to be read
+    ///   off a screen every time.
+    /// Join the squad on this code, or create it if nobody has yet.
+    ///
+    /// Resolved in one server-side call rather than a select-then-insert from
+    /// the client. Two people typing the same new code at the same moment is a
+    /// real race — at a gym it is the *expected* case, since you agree on a
+    /// code and both open the app — and a client-side check would let both win
+    /// and land them in different rooms with the same code on screen.
+    func joinOrCreateSquad(code: String, name: String) async throws -> Squad {
         guard let client else { throw BackendError.notConfigured }
-        let code = String(format: "%06d", Int.random(in: 0...999_999))
-        let id = UUID()
-        try await client.from("squads")
-            .insert(SquadInsert(id: id, name: name, joinCode: code))
+        let rows: [Squad] = try await client
+            .rpc("join_or_create_squad", params: ["p_code": code, "p_name": name])
             .execute()
-        return Squad(id: id, name: name, joinCode: code, createdAt: Date())
+            .value
+        guard let squad = rows.first else { throw BackendError.codeNotFound }
+        return squad
     }
 
     func squad(forCode code: String) async throws -> Squad {

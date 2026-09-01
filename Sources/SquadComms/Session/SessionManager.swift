@@ -76,10 +76,11 @@ final class SessionManager: ObservableObject {
         await join(code: code)
     }
 
-    func create(name: String) async {
+    func create(name: String, code: String) async {
         state = .connecting
         do {
-            let squad = try await backend.createSquad(name: name)
+            let squad = try await backend.joinOrCreateSquad(code: code, name: name)
+            self.squad = squad
             try await connect(to: squad)
         } catch {
             state = .failed(friendly(error))
@@ -135,30 +136,38 @@ final class SessionManager: ObservableObject {
     func openLine() async {
         guard case .idle = state else { return }
 
-        if let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode"), !code.isEmpty {
-            await join(code: code)
-            // A stale or deleted squad must not strand you on a failure screen
-            // at launch. Fall through and make a fresh one instead.
-            if case .failed = state {
-                state = .idle
-                await createWithRetry()
-            }
+        guard let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode"),
+              !code.isEmpty else {
+            // No code yet. The person picks one during onboarding rather than
+            // being handed a generated squad they never asked for.
+            state = .needsCode
             return
         }
 
-        await createWithRetry()
+        await joinOrCreate(code: code)
     }
 
-    /// Transient backend trouble at launch must not end in a dead-end screen.
-    /// The app's whole promise is that it is already on when you open it, so a
-    /// single failed request retries quietly before anything is shown.
-    private func createWithRetry() async {
+    /// Join the squad on this code, or create it if nobody has yet.
+    ///
+    /// The code IS the squad. Two people who agree on "742" both end up in the
+    /// same room regardless of who opened the app first, which is the whole
+    /// point of letting people choose it — you can say it out loud instead of
+    /// reading six digits off a screen.
+    /// The code IS the squad. Whoever opens it first creates it, everyone
+    /// after joins, and the server resolves the race — so there is no host, no
+    /// invite to accept, and no order anyone has to do things in.
+    func joinOrCreate(code: String) async {
+        UserDefaults.standard.set(code, forKey: "squadcomms.lastCode")
+        await createWithRetry(code: code)
+    }
+
+    private func createWithRetry(code: String) async {
         for delay in [0.0, 1.5, 4.0] {
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 state = .idle
             }
-            await create(name: defaultSquadName)
+            await create(name: defaultSquadName, code: code)
             if case .connected = state { return }
         }
     }
