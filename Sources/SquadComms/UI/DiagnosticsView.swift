@@ -31,13 +31,39 @@ struct DiagnosticsView: View {
                     }
                 }
 
-                Section("Audio") {
-                    row("Output", audioRoute, ok: true)
+                Section {
+                    let probe = AudioProbe.read()
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: probe.healthy ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(probe.healthy ? Theme.signal : Theme.danger)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(probe.healthy ? "Audio path is correct" : "Audio path is wrong")
+                                .font(.subheadline.weight(.semibold))
+                            Text(probe.verdict)
+                                .font(.caption)
+                                .foregroundStyle(Theme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    row("Category", probe.category, ok: probe.category == "PlayAndRecord")
+                    // .voiceChat on headphones is the exact v1 failure: it
+                    // forces a telephony path and everything through it,
+                    // music included, comes out thin.
+                    row("Mode", probe.mode, ok: probe.mode != "VoiceChat")
+                    row("Mixing", probe.options.contains("mixWithOthers") ? "Yes" : "NO",
+                        ok: probe.options.contains("mixWithOthers"))
+                    row("Ducking now", probe.ducking ? "Yes" : "No", ok: true)
+                    row("Sample rate", "\(Int(probe.sampleRate)) Hz", ok: probe.sampleRate >= 44_100)
+                    row("Buffer", String(format: "%.1f ms", probe.bufferMS), ok: probe.bufferMS <= 25)
+                    row("Output", probe.route, ok: true)
+                    row("Other audio", probe.otherAudioPlaying ? "Playing" : "None", ok: true)
                     row("Microphone", micPermission, ok: micGranted)
                     row("Input level", String(format: "%.0f dB", audio.inputLevelDB),
                         ok: audio.inputLevelDB > -55)
-                    row("Transmitting", audio.isTransmitting ? "Yes" : "No",
-                        ok: audio.isTransmitting)
+                } header: {
+                    Text("Audio")
+                } footer: {
+                    Text("Play music, have somebody talk, and watch Ducking now. If Mode ever reads VoiceChat while you're on AirPods, that's the bug that made music sound thin.")
                 }
 
                 Section("Proximity") {

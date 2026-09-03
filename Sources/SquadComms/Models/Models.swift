@@ -85,9 +85,6 @@ enum DuckBehavior: String, Codable, CaseIterable, Identifiable {
 
 enum SessionState: Equatable {
     case idle
-    /// No squad code chosen yet. The person picks one rather than being handed
-    /// a generated squad they never asked for.
-    case needsCode
     case connecting
     case connected
     case failed(String)
