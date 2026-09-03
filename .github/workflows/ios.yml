@@ -28,6 +28,14 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # Five separate times this codebase has shipped a control bound to a
+      # preference nothing reads — the duck, self-monitor, noise suppression,
+      # auto-pause, then the music choice and the visibility picker. Every one
+      # was invisible in review and on device: the UI responds and nothing
+      # happens. Cheap to check, so check it every build.
+      - name: Audit for dead settings
+        run: python3 scripts/audit_dead_controls.py
+
       - name: Generate Xcode project
         run: xcodegen generate
 
