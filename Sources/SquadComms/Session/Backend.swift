@@ -199,6 +199,31 @@ struct Backend {
         _ = try await client.rpc("set_ghost_mode", params: P(p_device_id: deviceID, p_ghost: ghost)).execute()
     }
 
+    /// Take ownership of a line if nobody holds it.
+    ///
+    /// The person who opened a session is otherwise load-bearing: they leave,
+    /// and the squad still talking behind them has a code that expires under
+    /// them. The longest-tenured remaining member is promoted, because they
+    /// are the one most likely to still be there in ten minutes.
+    func claimHost(squadID: UUID, deviceID: String) async throws -> String? {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_squad_id: String; let p_device_id: String }
+        struct R: Decodable { let host: String?
+            enum CodingKeys: String, CodingKey { case host = "r_host" } }
+        let rows: [R] = try await client
+            .rpc("claim_host", params: P(p_squad_id: squadID.uuidString, p_device_id: deviceID))
+            .execute().value
+        return rows.first?.host
+    }
+
+    /// Push the expiry out while a line is genuinely in use, so a code cannot
+    /// lapse mid-workout.
+    func touch(squadID: UUID) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_squad_id: String }
+        _ = try await client.rpc("touch_squad", params: P(p_squad_id: squadID.uuidString)).execute()
+    }
+
     func squad(forCode code: String) async throws -> Squad {
         guard let client else { throw BackendError.notConfigured }
         let rows: [Squad] = try await client.from("squads")

@@ -79,6 +79,7 @@ final class SessionManager: ObservableObject {
     /// sounds built and one that sounds bolted together.
     private var envelopes: [UUID: VoiceEnvelope] = [:]
     private var envelopeTimer: AnyCancellable?
+    private var heartbeat: Timer?
     private var speakingRemotes = Set<UUID>()
 
     init() {
@@ -227,6 +228,8 @@ final class SessionManager: ObservableObject {
         state = .connected
         SavedSquadStore.shared.remember(code: squad.joinCode, name: squad.name,
                                         members: members.map(\.displayName))
+        startHeartbeat()
+        Task { _ = try? await backend.claimHost(squadID: squad.id, deviceID: deviceID) }
         Telemetry.event("session_connected", ["squad": squad.id.uuidString])
     }
 
@@ -237,6 +240,7 @@ final class SessionManager: ObservableObject {
         await room.disconnect()
         proximity.stop()
         envelopeTimer?.cancel(); envelopeTimer = nil
+        heartbeat?.invalidate(); heartbeat = nil
         envelopes.removeAll()
         members.removeAll()
         speakingRemotes.removeAll()
@@ -312,6 +316,22 @@ final class SessionManager: ObservableObject {
         await leave()
         UserDefaults.standard.removeObject(forKey: "squadcomms.lastCode")
         UserDefaults.standard.removeObject(forKey: "squadcomms.onboarded")
+    }
+
+    /// Keep the line alive and make sure somebody owns it.
+    ///
+    /// Runs while connected. Two problems it solves: a code expiring under
+    /// people who are still talking, and a session whose host has walked out
+    /// leaving nothing to hold it open.
+    private func startHeartbeat() {
+        heartbeat?.invalidate()
+        heartbeat = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let squad = self.squad else { return }
+                try? await self.backend.touch(squadID: squad.id)
+                _ = try? await self.backend.claimHost(squadID: squad.id, deviceID: self.deviceID)
+            }
+        }
     }
 
     func setMicrophone(enabled: Bool) {

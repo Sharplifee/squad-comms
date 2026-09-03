@@ -22,10 +22,15 @@ struct LineView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     masthead
+                ConditionBanners()
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 14)
                     if session.squad == nil { closed } else { open }
                 }
             }
             .background(Theme.base)
+        .onAppear { AppConditions.shared.startWatching() }
+        .onDisappear { AppConditions.shared.stopWatching() }
             .navigationBarHidden(true)
             .sheet(isPresented: $showStart) { StartLineSheet() }
             .sheet(isPresented: $showJoin) { SwitchSquadSheet() }
