@@ -54,14 +54,9 @@ final class AudioCoordinator: ObservableObject {
         session.onRemoteSpeech = { [weak self] speaking in
             guard let self else { return }
             let prefs = PreferencesStore.shared.current
-            // The three-way music choice drives the existing duck machinery.
-            let behavior: DuckBehavior
-            switch prefs.musicBehaviour {
-            case .turnDown:       behavior = .duck
-            case .pauseAndRewind: behavior = .rewind
-            case .leaveAlone:     behavior = .duck   // nothing engages below
-            }
-            let ducks = prefs.musicBehaviour != .leaveAlone
+            // One source of truth for what happens to the music.
+            let behavior = prefs.duckBehavior
+            let ducks = behavior != .off
             if speaking {
                 // Engage the system duck only while they are actually talking.
                 self.audioSession.setDucking(ducks && behavior == .duck)

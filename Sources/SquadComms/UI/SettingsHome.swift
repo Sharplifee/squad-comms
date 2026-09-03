@@ -31,7 +31,7 @@ struct SettingsHome: View {
                 session.applyPreferences()
                 if old.noiseSuppression != new.noiseSuppression { audio.audioSession.reapplyMode() }
                 if old.selfMonitor != new.selfMonitor { audio.setSelfMonitorLevel(new.selfMonitor) }
-                if old.ghostMode != new.ghostMode || old.privateSession != new.privateSession {
+                if old.visibility != new.visibility {
                     session.applyPresence()
                 }
             }
@@ -129,15 +129,23 @@ struct SettingsHome: View {
         }
     }
 
+    /// Reads and writes the SAME field SessionManager acts on.
+    ///
+    /// This previously wrote ghostMode and privateSession while the session
+    /// read `visibility` — so the control moved, the footer changed, and
+    /// nothing whatsoever happened. Exactly the class of bug that made the
+    /// duck a no-op and the self-monitor silent.
     private var visibility: Binding<Int> {
         Binding(
             get: {
-                if prefs.ghostMode { return 2 }
-                return prefs.privateSession ? 1 : 0
+                switch prefs.visibility {
+                case .visible:  return 0
+                case .codeOnly: return 1
+                case .hidden:   return 2
+                }
             },
             set: { value in
-                prefs.ghostMode = (value == 2)
-                prefs.privateSession = (value >= 1)
+                prefs.visibility = value == 2 ? .hidden : (value == 1 ? .codeOnly : .visible)
             }
         )
     }

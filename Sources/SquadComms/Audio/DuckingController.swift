@@ -27,7 +27,7 @@ final class DuckingController {
         isDucked = true
 
         switch behavior {
-        case .duck:
+        case .duck, .off:
             break
         case .pause, .rewind:
             // applicationMusicPlayer reaches Apple Music and Podcasts only.
@@ -44,7 +44,7 @@ final class DuckingController {
         isDucked = false
 
         switch behavior {
-        case .duck:
+        case .duck, .off:
             break
         case .pause:
             MPMusicPlayerController.applicationMusicPlayer.play()

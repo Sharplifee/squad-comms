@@ -60,25 +60,34 @@ struct Member: Codable, Identifiable, Hashable {
 }
 
 /// What happens to your own media when someone in the squad talks.
+/// What happens to your music when somebody talks.
+///
+/// ONE enum. There were briefly two — this and MusicBehaviour — with Settings
+/// writing one and the audio path reading the other, so the control moved and
+/// nothing happened. Same class of bug as the duck that posted a notification
+/// nobody observed.
 enum DuckBehavior: String, Codable, CaseIterable, Identifiable {
     case duck        // lower to ~10%
     case pause       // full stop
     case rewind      // pause, then rewind on resume so nothing is missed
+    case off         // leave the music exactly as it is
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .duck:   return "Lower my audio"
-        case .pause:  return "Pause my audio"
+        case .duck:   return "Turn it down"
+        case .pause:  return "Pause it"
         case .rewind: return "Pause and rewind"
+        case .off:    return "Leave it alone"
         }
     }
 
     var detail: String {
         switch self {
-        case .duck:   return "Music drops to a whisper while they speak, then comes straight back."
-        case .pause:  return "Music stops completely, then picks up where it left off."
-        case .rewind: return "Music stops, then rewinds a few seconds so you don't miss anything."
+        case .duck:   return "Drops to a whisper while they speak, then comes straight back."
+        case .pause:  return "Stops completely, then picks up where it left off."
+        case .rewind: return "Stops, then jumps back a few seconds so you don't miss anything."
+        case .off:    return "Voices come in over the top at full music volume."
         }
     }
 }
@@ -88,31 +97,6 @@ enum SessionState: Equatable {
     case connecting
     case connected
     case failed(String)
-}
-
-/// What happens to your music when somebody talks.
-///
-/// One question with three answers, collapsed from six controls that between
-/// them expressed a decision nobody revisits.
-enum MusicBehaviour: String, Codable, CaseIterable, Identifiable {
-    case turnDown, pauseAndRewind, leaveAlone
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .turnDown:       return "Turn it down"
-        case .pauseAndRewind: return "Pause and rewind"
-        case .leaveAlone:     return "Leave it alone"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .turnDown:       return "Drops to a whisper while they speak, then comes straight back."
-        case .pauseAndRewind: return "Stops, then jumps back a few seconds so you don't miss anything."
-        case .leaveAlone:     return "Voices come in over the top at full music volume."
-        }
-    }
 }
 
 /// Who can find you. Ghost mode and private session were both answering this,
@@ -165,24 +149,19 @@ struct Preferences: Codable, Equatable {
     var selfMonitor: Double = 0.20
     var autoPause: Bool = false
     var autoPauseSeconds: Double = 8
-    var autoRewind: Bool = false
     var noiseSuppression: NoiseSuppression = .standard
 
     // Presence
     /// List gives you the sliders; tiles give you faces you can read across a
     /// room. Persisted because it is a standing preference, not a mode.
-    var squadViewIsList: Bool = false
     /// Widens the proximity scan and slows the radar once a line is open.
     /// Continuous BLE scanning plus always-on VAD plus WebRTC will not survive
     /// a 90 minute session comfortably at full rate.
-    var musicBehaviour: MusicBehaviour = .turnDown
     var visibility: Visibility = .visible
     var lowPowerMode: Bool = false
     /// A short tone on join, leave and end. The phone is in a pocket, so
     /// haptics and anything visual both miss entirely.
     var soundCues: Bool = true
-    var ghostMode: Bool = false
-    var privateSession: Bool = false
     var duckBehavior: DuckBehavior = .duck
     var duckLevel: Double = 0.10          // 10% of current volume
     var rewindSeconds: Double = 8
