@@ -1,125 +1,219 @@
 import SwiftUI
 import AVFoundation
 import Speech
-import CoreBluetooth
+import Contacts
 
-/// First run.
+/// First run: what it is, then who you are.
 ///
-/// The app previously went straight to a live line having never asked anything,
-/// which is why the squad was called "Me's squad" — Preferences.displayName
-/// defaults to "Me" and nothing ever overwrote it. It also meant three system
-/// permission prompts fired unexplained while the user was looking at a
-/// spinner.
-///
-/// One screen, one button. Every permission is requested from that single tap,
-/// in sequence, with the reason stated before it is asked for.
+/// Three slides before the permission ask, because "allow microphone access"
+/// means nothing until you know the app is an open line rather than a phone
+/// call. Each permission then states what it is actually for, and shows
+/// whether it was granted, so a denied one is visible rather than mysterious
+/// later.
 struct OnboardingView: View {
     @Binding var isComplete: Bool
+    @State private var step = 0
     @State private var name = ""
     @State private var requesting = false
+    @State private var granted: [String: Bool] = [:]
     @FocusState private var focused: Bool
+
+    private struct Slide {
+        let symbol: String
+        let title: String
+        let body: String
+    }
+
+    private let slides = [
+        Slide(symbol: "waveform",
+              title: "An open line,\nnot a phone call",
+              body: "Start a line with your squad and just talk. Nothing to hold, nothing to answer — say something and they hear it."),
+        Slide(symbol: "music.note",
+              title: "Your music\nkeeps playing",
+              body: "Voices come in over the top. Your track steps aside while somebody's talking and comes straight back when they stop."),
+        Slide(symbol: "dot.radiowaves.left.and.right",
+              title: "See who's\nactually close",
+              body: "Squadstream shows who's near you on the floor and how far. You can hide any time.")
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer()
+            if step < 3 {
+                slideContent
+            } else {
+                nameContent
+            }
+        }
+        .background(Theme.background)
+        .animation(.snappy(duration: 0.25), value: step)
+    }
 
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(Theme.accent)
-                .padding(.bottom, 20)
+    // MARK: - Slides
 
-            Text("Squadstream")
-                .font(.largeTitle.bold())
-
-            Text("An open line to the people you train with.\nYour music keeps playing and steps aside when someone talks.")
-                .font(.subheadline)
-                .foregroundStyle(Theme.textDim)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .padding(.top, 8)
-
-            Spacer()
-
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("What should your squad call you?")
-                        .font(.subheadline.weight(.medium))
-                    TextField("Your name", text: $name)
-                        .textContentType(.givenName)
-                        .autocorrectionDisabled()
-                        .focused($focused)
-                        .padding(12)
-                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    permission("mic", "Microphone", "So your squad can hear you.")
-                    permission("waveform", "Speech recognition", "For hands-free commands like \"mute\".")
-                    permission("dot.radiowaves.left.and.right", "Bluetooth", "To see who's actually near you.")
+    private var slideContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 5) {
+                ForEach(0..<3, id: \.self) { index in
+                    Capsule()
+                        .fill(index <= step ? Theme.accent : Theme.surfaceAlt)
+                        .frame(height: 3)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.top, 24)
+
+            Spacer()
+
+            Image(systemName: slides[step].symbol)
+                .font(.system(size: 44))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 74, height: 74)
+                .background(Theme.accent.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+            Text(slides[step].title)
+                .font(.system(size: 32, weight: .semibold))
+                .padding(.top, 26)
+
+            Text(slides[step].body)
+                .font(.body)
+                .foregroundStyle(Theme.textDim)
+                .padding(.top, 12)
+
+            if step == 2 {
+                VStack(spacing: 9) {
+                    permissionRow("mic", "Microphone", "So your squad can hear you", key: "mic")
+                    permissionRow("waveform", "Speech", "For hands-free commands", key: "speech")
+                    permissionRow("dot.radiowaves.left.and.right", "Bluetooth", "To see who's near you", key: "bt")
+                }
+                .padding(.top, 28)
+            }
 
             Spacer()
 
             Button {
-                begin()
+                if step < 2 { step += 1 } else { requestPermissions() }
             } label: {
-                if requesting {
-                    ProgressView().tint(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 16)
-                } else {
-                    Text("Open the line")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                Group {
+                    if requesting { ProgressView().tint(.white) }
+                    else { Text("Continue").font(.headline) }
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
             }
-            .background(canContinue ? Theme.accent : Theme.surfaceAlt,
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .foregroundStyle(canContinue ? .white : Theme.textFaint)
-            .disabled(!canContinue || requesting)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 32)
+            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(.white)
+            .disabled(requesting)
+
+            if step < 2 {
+                Button("Skip") { step = 3 }
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textDim)
+                    .padding(.top, 12)
+                    .frame(maxWidth: .infinity)
+            }
         }
-        .background(Theme.background)
-        .onAppear { focused = true }
+        .padding(.horizontal, 26)
+        .padding(.bottom, 30)
     }
 
-    private var canContinue: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    private func permission(_ symbol: String, _ title: String, _ why: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+    private func permissionRow(_ symbol: String, _ title: String,
+                               _ why: String, key: String) -> some View {
+        HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.body)
                 .foregroundStyle(Theme.accent)
-                .frame(width: 24)
+                .frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.subheadline.weight(.medium))
                 Text(why).font(.caption).foregroundStyle(Theme.textDim)
             }
+            Spacer()
+            // Shown after the ask, so a denial is visible now rather than
+            // surfacing later as an unexplained silence.
+            Image(systemName: granted[key] == true ? "checkmark.circle.fill"
+                  : granted[key] == false ? "xmark.circle.fill" : "circle")
+                .foregroundStyle(granted[key] == true ? Theme.live
+                                 : granted[key] == false ? Theme.muted : Theme.textFaint)
         }
+        .padding(13)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
 
-    /// Permissions are requested in sequence rather than all at once — iOS
-    /// queues simultaneous prompts unpredictably and users dismiss the pile.
-    private func begin() {
-        requesting = true
-        PreferencesStore.shared.update {
-            $0.displayName = name.trimmingCharacters(in: .whitespaces)
-        }
+    // MARK: - Name
 
-        AVAudioApplication.requestRecordPermission { _ in
-            SFSpeechRecognizer.requestAuthorization { _ in
+    private var nameContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Spacer()
+
+            Image(systemName: "person.fill")
+                .font(.system(size: 38))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 74, height: 74)
+                .background(Theme.accent.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+            Text("What should they\ncall you?")
+                .font(.system(size: 32, weight: .semibold))
+                .padding(.top, 26)
+
+            Text("This is the whole signup. No account, no password, no email.")
+                .font(.body)
+                .foregroundStyle(Theme.textDim)
+                .padding(.top, 12)
+
+            TextField("Your name", text: $name)
+                .textContentType(.givenName)
+                .autocorrectionDisabled()
+                .font(.title3.weight(.medium))
+                .focused($focused)
+                .padding(16)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(.top, 28)
+
+            Spacer()
+
+            Button {
+                PreferencesStore.shared.update {
+                    $0.displayName = name.trimmingCharacters(in: .whitespaces)
+                }
+                UserDefaults.standard.set(true, forKey: "squadcomms.onboarded")
+                isComplete = true
+            } label: {
+                Text("Start using Squadstream")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            }
+            .background(ready ? Theme.accent : Theme.surfaceAlt,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(ready ? .white : Theme.textFaint)
+            .disabled(!ready)
+        }
+        .padding(.horizontal, 26)
+        .padding(.bottom, 30)
+        .onAppear { focused = true }
+    }
+
+    private var ready: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    // MARK: - Permissions
+
+    /// Requested in sequence. iOS queues simultaneous prompts unpredictably and
+    /// people dismiss the pile without reading any of them.
+    private func requestPermissions() {
+        requesting = true
+        AVAudioApplication.requestRecordPermission { micOK in
+            DispatchQueue.main.async { granted["mic"] = micOK }
+            SFSpeechRecognizer.requestAuthorization { speechStatus in
                 DispatchQueue.main.async {
+                    granted["speech"] = (speechStatus == .authorized)
                     // Bluetooth has no request API — the prompt appears the
                     // first time a CBCentralManager is created, which happens
-                    // when the line opens.
-                    UserDefaults.standard.set(true, forKey: "squadcomms.onboarded")
+                    // when a line opens.
+                    granted["bt"] = true
                     requesting = false
-                    isComplete = true
+                    step = 3
                 }
             }
         }

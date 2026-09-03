@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var copied = false
     @State private var showStart = false
     @State private var showEndOptions = false
+    @EnvironmentObject private var toasts: ToastCenter
     @State private var prefs = PreferencesStore.shared.current
 
     var body: some View {
@@ -266,8 +267,9 @@ struct HomeView: View {
             }
 
             Button {
-                session.muteAll(!allMuted)
-                Haptics.selection()
+                let muting = !allMuted
+                session.muteAll(muting)
+                toasts.show(muting ? "Everyone muted" : "Everyone unmuted")
             } label: {
                 controlButton(allMuted ? "Unmute all" : "Mute all",
                               allMuted ? "speaker.wave.2" : "speaker.slash",
@@ -414,29 +416,30 @@ struct StartLineSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var code = ""
     @State private var working = false
-    @FocusState private var focused: Bool
+
+    private let maximum = 8
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
-                Text("Pick a code for your line")
-                    .font(.headline)
-                Text("Anything from 3 to 8 digits. Whoever types the same one lands with you.")
+            VStack(spacing: 0) {
+                Text("Pick a code")
+                    .font(.title2.weight(.semibold))
+                    .padding(.top, 12)
+
+                Text("3 to 8 digits. Anyone who types the same one lands with you.")
                     .font(.footnote)
                     .foregroundStyle(Theme.textDim)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 30)
+                    .padding(.top, 6)
 
-                TextField("742", text: $code)
-                    .keyboardType(.numberPad)
-                    .font(.system(size: 44, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .kerning(5)
-                    .multilineTextAlignment(.center)
-                    .focused($focused)
-                    .onChange(of: code) { _, new in
-                        code = String(new.filter(\.isNumber).prefix(8))
-                    }
+                CodeBoxes(code: code, slots: max(3, min(code.count + 1, maximum)))
+                    .padding(.vertical, 22)
+
+                CodeKeypad(code: $code, maximum: maximum)
+                    .padding(.horizontal, 40)
+
+                Spacer(minLength: 12)
 
                 Button {
                     working = true
@@ -451,21 +454,20 @@ struct StartLineSheet: View {
                         else { Text("Open the line").font(.headline) }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, 15)
                 }
-                .buttonStyle(.borderedProminent)
+                .background(code.count >= 3 ? Theme.accent : Theme.surfaceAlt,
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .foregroundStyle(code.count >= 3 ? .white : Theme.textFaint)
                 .disabled(code.count < 3 || working)
                 .padding(.horizontal, 24)
-
-                Spacer()
+                .padding(.bottom, 16)
             }
-            .padding(.top, 26)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
         }
-        .presentationDetents([.medium])
-        .onAppear { focused = true }
+        .presentationDetents([.large])
     }
 }

@@ -11,6 +11,7 @@ import SwiftUI
 struct ParticipantGrid: View {
     let members: [Member]
     @EnvironmentObject private var session: SessionManager
+    @State private var expanded: UUID?
 
     private let columns = [GridItem(.flexible(), spacing: 11),
                            GridItem(.flexible(), spacing: 11)]
@@ -19,7 +20,7 @@ struct ParticipantGrid: View {
         LazyVGrid(columns: columns, spacing: 11) {
             SelfTile()
             ForEach(members) { member in
-                ParticipantTile(member: member)
+                ParticipantTile(member: member, expanded: $expanded)
             }
         }
     }
@@ -58,9 +59,63 @@ private struct SelfTile: View {
 
 private struct ParticipantTile: View {
     let member: Member
+    @Binding var expanded: UUID?
     @EnvironmentObject private var session: SessionManager
 
+    private var isExpanded: Bool { expanded == member.id }
+
     var body: some View {
+        VStack(spacing: 0) {
+            tile
+            // Long press opens this person's controls in place, so adjusting
+            // one person mid-set does not mean leaving the screen showing
+            // everyone.
+            if isExpanded { controls }
+        }
+        .animation(.snappy(duration: 0.22), value: isExpanded)
+        .onLongPressGesture(minimumDuration: 0.35) {
+            expanded = isExpanded ? nil : member.id
+            Haptics.impact(.medium)
+        }
+    }
+
+    private var controls: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Image(systemName: "speaker.fill").font(.caption2).foregroundStyle(Theme.textFaint)
+                Slider(
+                    value: Binding(
+                        get: { member.volume },
+                        set: { session.setVolume($0, for: member) }
+                    ),
+                    in: 0...1
+                )
+                .disabled(member.isMutedByMe)
+                Text("\(Int(member.volume * 100))")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(Theme.textFaint)
+                    .frame(width: 24, alignment: .trailing)
+            }
+
+            Toggle("I hear them", isOn: Binding(
+                get: { !member.isMutedByMe },
+                set: { session.setMuted(!$0, for: member) }
+            ))
+            .font(.caption)
+
+            Toggle("They hear me", isOn: Binding(
+                get: { !member.isMutedToThem },
+                set: { session.setMutedToThem(!$0, for: member) }
+            ))
+            .font(.caption)
+        }
+        .padding(12)
+        .background(Theme.surfaceAlt, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.top, 6)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private var tile: some View {
         Button {
             session.setMuted(!member.isMutedByMe, for: member)
             Haptics.selection()

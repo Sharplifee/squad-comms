@@ -10,6 +10,7 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject private var session: SessionManager
     @StateObject private var focus = FocusModeController()
+    @StateObject private var toasts = ToastCenter()
 
     var body: some View {
         ZStack {
@@ -36,6 +37,8 @@ struct MainTabView: View {
                     .ignoresSafeArea()
             }
         }
+        .toasts(toasts)
+        .environmentObject(toasts)
         .animation(.easeInOut(duration: 0.2), value: focus.isActive)
         .onAppear { focus.attach(session) }
     }
