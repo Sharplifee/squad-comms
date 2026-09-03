@@ -51,13 +51,6 @@ struct SettingsView: View {
                 } header: {
                     Text("How you talk")
                 }
-
-                    }
-                } header: {
-                    Text("Hands-free")
-                } footer: {
-                    Text("Say any of these out loud and it happens without touching your phone.")
-                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
