@@ -91,6 +91,48 @@ struct Backend {
         _ = try await client.rpc("end_squad", params: P(p_squad_id: id.uuidString)).execute()
     }
 
+    // MARK: - Contacts
+
+    struct ContactRow: Decodable {
+        let phoneHash: String
+        let displayName: String
+        let lastSeenAt: Date?
+
+        enum CodingKeys: String, CodingKey {
+            case phoneHash   = "phone_hash"
+            case displayName = "display_name"
+            case lastSeenAt  = "last_seen_at"
+        }
+    }
+
+    /// Which of these hashes belong to somebody who has the app. Only hashes
+    /// cross the wire — the server cannot recover a number from one, and
+    /// cannot be used to enumerate users, because you can only ask about
+    /// hashes you already hold.
+    func matchContacts(hashes: [String]) async throws -> [ContactRow] {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_hashes: [String] }
+        return try await client
+            .rpc("match_contacts", params: P(p_hashes: hashes))
+            .execute().value
+    }
+
+    func registerDevice(deviceID: String, displayName: String,
+                        phoneHash: String?, ghost: Bool) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable {
+            let p_device_id: String
+            let p_display_name: String
+            let p_phone_hash: String?
+            let p_ghost: Bool
+            let p_identity: String
+        }
+        _ = try await client.rpc("register_device", params: P(
+            p_device_id: deviceID, p_display_name: displayName,
+            p_phone_hash: phoneHash, p_ghost: ghost, p_identity: deviceID
+        )).execute()
+    }
+
     func squad(forCode code: String) async throws -> Squad {
         guard let client else { throw BackendError.notConfigured }
         let rows: [Squad] = try await client.from("squads")

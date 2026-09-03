@@ -21,3 +21,10 @@ enum KeepAlive {
         try? BGTaskScheduler.shared.submit(request)
     }
 }
+
+
+extension Notification.Name {
+    /// Posted when a background task wants the session re-checked. Previously
+    /// declared alongside the VoIP push manager, which is gone.
+    static let squadWakeRequested = Notification.Name("squadWakeRequested")
+}

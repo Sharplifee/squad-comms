@@ -220,6 +220,55 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Controls
 
+    /// Step out on your own. The line stays open for everyone else.
+    func leave() async {
+        await room.disconnect()
+        proximity.stop()
+        envelopeTimer?.cancel(); envelopeTimer = nil
+        envelopes.removeAll()
+        members.removeAll()
+        speakingRemotes.removeAll()
+        squad = nil
+        sessionStart = nil
+        privateLineTo = nil
+        privateLineFrom = nil
+        state = .idle
+    }
+
+    /// Close the line for everyone in it.
+    ///
+    /// Distinct from leaving. Walking out of a finished workout and leaving
+    /// people connected to an empty room is not what you meant, but neither is
+    /// kicking everybody every time you personally need to go.
+    func endForEveryone() async {
+        broadcast(.sessionEnded)
+        // Let the message leave before tearing down the room it travels over.
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        if let id = squad?.id { try? await backend.endSquad(id: id) }
+        await leave()
+    }
+
+    private func handleSessionEnded() async {
+        endedByHost = true
+        await leave()
+    }
+
+    func reset() { state = .idle }
+
+    /// Rejoin the same line after a drop LiveKit cannot recover from — an
+    /// expired token or a room closed server-side both look identical from
+    /// here and leave you connected to nothing.
+    func reconnectIfNeeded() async {
+        guard let squad else { return }
+        await room.disconnect()
+        state = .connecting
+        do {
+            try await connect(to: squad)
+        } catch {
+            state = .failed(friendly(error))
+        }
+    }
+
     func setMicrophone(enabled: Bool) {
         guard !selfMuted else { return }
         Task { try? await room.localParticipant.setMicrophone(enabled: enabled) }

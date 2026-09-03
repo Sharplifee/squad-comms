@@ -25,7 +25,11 @@ struct SquadCommsApp: App {
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        VoIPPushManager.shared.register()
+        // VoIP push is deliberately gone. Since iOS 13 every VoIP push must
+        // report an incoming call to CallKit or iOS terminates the app and
+        // eventually stops delivering pushes altogether — and a walkie-talkie
+        // must not ring like a phone call. Accepted tradeoff: once iOS kills
+        // the app, nobody can pull you back automatically.
         KeepAlive.registerTask()
         return true
     }
