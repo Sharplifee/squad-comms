@@ -23,7 +23,7 @@ struct PlateRadarView: View {
     var body: some View {
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
-            let radius = side / 2 - 28
+            let radius = side / 2 - 18
 
             ZStack {
                 rings(radius: radius)
@@ -35,7 +35,7 @@ struct PlateRadarView: View {
             .frame(width: side, height: side)
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
-        .aspectRatio(1, contentMode: .fit)
+
         .onAppear { pulse = !reduceMotion }
         // VoiceOver cannot read a picture of dots. The radar is the primary
         // content of this screen, so it has to say who is present and how far.
@@ -82,8 +82,8 @@ struct PlateRadarView: View {
             }
             .stroke(Theme.hairline.opacity(0.3), lineWidth: 0.5)
 
-            ForEach(0..<4, id: \.self) { index in
-                let fraction = CGFloat(index + 1) / 4
+            ForEach(0..<3, id: \.self) { index in
+                let fraction = CGFloat(index + 1) / 3
                 let r = radius * fraction
                 Circle()
                     .strokeBorder(Theme.hairline, lineWidth: 0.5)

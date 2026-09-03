@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Four tabs.
+/// Three tabs.
 ///
-/// Everything used to live on one scrolling screen with a gear icon, which
-/// meant the mixing controls, the diagnostics and the squad list all competed
-/// for the same space and none of them had room. Tabs give each its own
-/// surface and make the app navigable without scrolling past things you did
-/// not want.
+/// Five collapsed to Line, Squad and Settings. Diagnostics was never a place
+/// you go on purpose — it is where you look when something is wrong, which is
+/// a Settings errand. Contacts folded into the Line screen's nearby flow and
+/// into Settings, because finding somebody is part of opening a line, not a
+/// separate destination.
 struct MainTabView: View {
     @EnvironmentObject private var session: SessionManager
     @StateObject private var focus = FocusModeController()
@@ -14,11 +14,6 @@ struct MainTabView: View {
 
     var body: some View {
         ZStack {
-            // Three tabs, down from five. Diagnostics moved into Settings —
-            // it is something you open when something is wrong, not a
-            // destination. Contacts folded into the Line screen's nearby flow
-            // and Settings, because "who can I call" and "who is here" were
-            // never really two questions.
             TabView {
                 LineView(focus: focus)
                     .tabItem { Label("Line", systemImage: "waveform") }
@@ -27,13 +22,13 @@ struct MainTabView: View {
                     .tabItem { Label("Squad", systemImage: "person.2") }
                     .badge(session.members.count)
 
-                SettingsTabView()
+                SettingsHome()
                     .tabItem { Label("Settings", systemImage: "gearshape") }
             }
+            .tint(Theme.text)
 
             if focus.isActive {
-                FocusOverlay(focus: focus)
-                    .ignoresSafeArea()
+                FocusOverlay(focus: focus).ignoresSafeArea()
             }
         }
         .toasts(toasts)
@@ -43,11 +38,11 @@ struct MainTabView: View {
     }
 }
 
-/// The squad on its own surface, with your own card pinned at the top.
+/// One row per person: name, live state, volume inline. Expand for routing and
+/// Block and report. Your own card pinned at the top.
 struct SquadTabView: View {
     @EnvironmentObject private var session: SessionManager
     @EnvironmentObject private var audio: AudioCoordinator
-    @State private var isList = PreferencesStore.shared.current.squadViewIsList
 
     var body: some View {
         NavigationStack {
@@ -55,100 +50,50 @@ struct SquadTabView: View {
                 if session.squad == nil {
                     ContentUnavailableView(
                         "No line open",
-                        systemImage: "dot.radiowaves.left.and.right",
-                        description: Text("Open a line from the Home tab and your squad shows up here.")
+                        systemImage: "waveform",
+                        description: Text("Open one from the Line tab and your squad shows up here.")
                     )
-                } else if session.members.isEmpty {
-                    ContentUnavailableView(
-                        "Nobody else is on",
-                        systemImage: "person.2.slash",
-                        description: Text("Share your code and they drop straight in.")
-                    )
-                } else if isList {
-                    listView
                 } else {
-                    tileView
+                    List {
+                        Section { selfRow }
+                        if session.members.isEmpty {
+                            Section {
+                                Text("Nobody else is on yet. Share your code and they drop straight in.")
+                                    .font(.system(size: 13.5, design: .rounded))
+                                    .foregroundStyle(Theme.textDim)
+                            }
+                        } else {
+                            ForEach(session.members) { member in
+                                Section { RoutingCard(member: member) }
+                            }
+                        }
+                    }
+                    .scrollContentBackground(.hidden)
+                    .background(Theme.base)
                 }
             }
             .navigationTitle("Squad")
-            .toolbar {
-                if !session.members.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            isList.toggle()
-                            PreferencesStore.shared.update { $0.squadViewIsList = isList }
-                            Haptics.selection()
-                        } label: {
-                            Image(systemName: isList ? "square.grid.2x2" : "list.bullet")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Tiles: faces you can read at arm's length. Tap to mute.
-    private var tileView: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                selfCard
-                ParticipantGrid(members: session.members)
-            }
-            .padding(16)
-        }
-    }
-
-    /// List: the controls. One card per person with their level and both
-    /// directions of the connection stated separately.
-    private var listView: some View {
-        List {
-            Section { selfRow }
-            ForEach(session.members) { member in
-                Section {
-                    RoutingCard(member: member)
-                }
-            }
         }
     }
 
     private var selfRow: some View {
         HStack(spacing: 12) {
             Image(systemName: audio.isTransmitting ? "waveform" : "person.fill")
-                .foregroundStyle(audio.isTransmitting ? Theme.live : Theme.textFaint)
+                .foregroundStyle(audio.isTransmitting ? Theme.signal : Theme.textFaint)
                 .frame(width: 22)
             Text(PreferencesStore.shared.current.displayName)
+                .font(.system(size: 15, design: .rounded))
             Text("YOU")
-                .font(.caption2.weight(.semibold))
+                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
                 .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Theme.surfaceAlt, in: Capsule())
+                .background(Theme.raised, in: RoundedRectangle(cornerRadius: 5))
                 .foregroundStyle(Theme.textDim)
             Spacer()
         }
-    }
-
-    private var selfCard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: audio.isTransmitting ? "waveform" : "person.fill")
-                .foregroundStyle(audio.isTransmitting ? Theme.live : Theme.textFaint)
-            Text(PreferencesStore.shared.current.displayName)
-            Text("YOU")
-                .font(.caption2.weight(.semibold))
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Theme.surfaceAlt, in: Capsule())
-                .foregroundStyle(Theme.textDim)
-            Spacer()
-        }
-        .padding(14)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
-/// One person, both directions.
-///
-/// Hearing them and them hearing you are separate switches because they are
-/// separate needs. Listening to somebody without them hearing you mid-set is
-/// normal; so is talking to someone whose mic has a leaf blower behind it that
-/// you have muted.
+/// One person, both directions of the connection, and the way to stop them.
 struct RoutingCard: View {
     let member: Member
     @EnvironmentObject private var session: SessionManager
@@ -158,48 +103,47 @@ struct RoutingCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 11) {
                 Image(systemName: member.isSpeaking && !member.isMutedByMe ? "waveform" : "person.fill")
-                    .foregroundStyle(member.isSpeaking && !member.isMutedByMe ? Theme.live : Theme.textFaint)
+                    .foregroundStyle(member.isSpeaking && !member.isMutedByMe
+                                     ? Theme.signal : Theme.textFaint)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(member.displayName)
+                    Text(member.displayName).font(.system(size: 15, design: .rounded))
                     if member.nearby {
                         Text("Nearby").font(.caption).foregroundStyle(Theme.textDim)
                     }
                 }
                 Spacer()
                 Text("\(Int(member.volume * 100))%")
-                    .font(.subheadline)
+                    .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(Theme.textDim)
-                    .monospacedDigit()
             }
 
-            Slider(
-                value: Binding(
-                    get: { member.volume },
-                    set: { session.setVolume($0, for: member) }
-                ),
-                in: 0...1
-            )
+            Slider(value: Binding(
+                get: { member.volume },
+                set: { session.setVolume($0, for: member) }
+            ), in: 0...1)
+            .tint(Theme.text)
             .disabled(member.isMutedByMe)
 
             Toggle("I hear them", isOn: Binding(
                 get: { !member.isMutedByMe },
                 set: { session.setMuted(!$0, for: member); Haptics.selection() }
             ))
-            .font(.subheadline)
+            .font(.system(size: 14, design: .rounded))
 
             Toggle("They hear me", isOn: Binding(
                 get: { !member.isMutedToThem },
                 set: { session.setMutedToThem(!$0, for: member); Haptics.selection() }
             ))
-            .font(.subheadline)
+            .font(.system(size: 14, design: .rounded))
 
             Button(role: .destructive) { reporting = true } label: {
-                Label("Block and report", systemImage: "hand.raised")
-                    .font(.subheadline)
+                Text("Block and report")
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
             }
             .sheet(isPresented: $reporting) { ReportSheet(member: member) }
         }
         .padding(.vertical, 4)
+        .tint(Theme.signal)
     }
 }
