@@ -2,72 +2,73 @@ import SwiftUI
 
 /// Design tokens.
 ///
-/// Everything here resolves to a system semantic colour rather than a fixed
-/// hex value, so the app inherits Apple's light and dark palettes, contrast
-/// settings and future OS changes for free. A hand-picked dark palette looks
-/// deliberate in a screenshot and wrong on a real device the moment someone
-/// turns on Increase Contrast or uses the app outdoors in daylight.
+/// Base is graphite rather than pure black — on OLED, true black makes every
+/// card edge a hard seam and the whole interface reads as a set of floating
+/// rectangles rather than one surface.
 ///
-/// One accent colour, used only for things that are live or actionable.
-/// Everything else is greyscale, which is what makes the accent mean anything.
+/// **One accent, and it means exactly one thing: live audio.** Mic hot,
+/// somebody speaking, the transmit threshold. Nothing else may use it. That is
+/// what makes a glance mid-set instant — if the yellow is showing, sound is
+/// moving. Spending the accent on a chevron or a selected tab would destroy
+/// the only signal in the app that has to be read without thinking.
 enum Theme {
 
     // MARK: - Surfaces
-    static let background  = Color(.systemGroupedBackground)
-    static let surface     = Color(.secondarySystemGroupedBackground)
-    static let surfaceAlt  = Color(.tertiarySystemGroupedBackground)
-    static let hairline    = Color(.separator)
+    static let base       = Color(red: 0.078, green: 0.086, blue: 0.102)  // #14161A
+    static let surface    = Color(red: 0.110, green: 0.122, blue: 0.145)  // #1C1F25
+    static let raised     = Color(red: 0.137, green: 0.153, blue: 0.188)  // #232730
+    static let line       = Color(red: 0.180, green: 0.200, blue: 0.239)  // #2E333D
 
     // MARK: - Text
-    static let text        = Color.primary
-    static let textDim     = Color.secondary
-    /// tertiaryLabel fails AA against the grouped background for anything
-    /// bigger than a caption, so it is reserved for decoration and icons.
-    /// Anything carrying words uses textDim.
-    static let textFaint   = Color(.secondaryLabel).opacity(0.85)
+    static let text       = Color(red: 0.949, green: 0.953, blue: 0.961)  // #F2F3F5
+    static let muted      = Color(red: 0.541, green: 0.565, blue: 0.612)  // #8A909C
+    static let dim        = Color(red: 0.353, green: 0.380, blue: 0.427)  // #5A616D
 
     // MARK: - Meaning
-    /// Actionable and live. Kept to the system tint so the app matches every
-    /// other app on the device.
-    static let accent      = Color.accentColor
-    /// Someone is transmitting.
-    static let live        = Color.green
-    /// A direct line — the one state that must never be mistaken for the group.
-    static let warning     = Color.orange
-    /// Muted or destructive.
-    static let muted       = Color.red
+    /// LIVE AUDIO ONLY. See the note above before using this anywhere.
+    static let signal     = Color(red: 0.922, green: 0.796, blue: 0.294)  // #EBCB4B
+    static let danger     = Color(red: 0.898, green: 0.376, blue: 0.353)  // #E5605A
 
-    // MARK: - Radar range bands
-    /// Distance bands fade with distance rather than changing hue. Colour-coding
-    /// rings by hue implies categories that do not exist — there is only near
-    /// and far, and opacity says that without inventing meaning.
-    static let bands: [Color]  = [accent, accent, accent, accent]
-    static let bandWeights     = [1, 2, 3, 4]
-    static func bandOpacity(_ index: Int) -> Double { [0.55, 0.38, 0.24, 0.14][min(index, 3)] }
+    // MARK: - Compatibility aliases
+    // Older call sites still refer to these names. Mapped rather than
+    // renamed everywhere at once, so the palette lands in one commit.
+    static let background  = base
+    static let surfaceAlt  = raised
+    static let hairline    = line
+    static let textDim     = muted
+    static let textFaint   = dim
+    static let accent      = text        // actions are white, not signal
+    static let live        = signal
+    static let warning     = signal
 
-    static let corner: CGFloat = 12
+    static let corner: CGFloat = 18
+    static let heroCorner: CGFloat = 22
+    /// Rounded square, never a circle — a circle at this size reads as a chat
+    /// avatar, and this is not a chat.
+    static let avatarCorner: CGFloat = 13
 
-    static func band(for normalised: Double) -> Int {
-        min(max(Int(normalised * 4), 0), 3)
-    }
+    /// Distance bands fade rather than change hue. Colour-coding distance
+    /// would need a second accent, and there is only one.
     static func color(for normalised: Double) -> Color {
-        accent.opacity(bandOpacity(band(for: normalised)) + 0.35)
+        text.opacity(max(0.35, 1 - normalised * 0.55))
     }
 }
 
 extension View {
-    /// A grouped-list style container. Matches the inset cards the system uses
-    /// in Settings, Health and Fitness, including the corner radius.
     func card() -> some View {
         self
             .padding(16)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
     }
 
-    /// Section headers use the system's own uppercase footnote treatment rather
-    /// than letter-spaced stencil type — the same as every Settings screen.
     func stampLabel() -> some View {
         self.font(.footnote)
-            .foregroundStyle(Theme.textDim)
+            .foregroundStyle(Theme.dim)
+    }
+
+    /// SF Rounded for the interface. Numbers and codes use tabular monospace
+    /// so they do not shift width as they change.
+    func interfaceFont(_ size: CGFloat, _ weight: Font.Weight = .regular) -> some View {
+        self.font(.system(size: size, weight: weight, design: .rounded))
     }
 }

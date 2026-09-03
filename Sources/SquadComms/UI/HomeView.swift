@@ -282,7 +282,7 @@ struct HomeView: View {
             Button {
                 showEndOptions = true
             } label: {
-                controlButton("End", "phone.down.fill", tint: Theme.muted)
+                controlButton("End", "phone.down.fill", tint: Theme.danger)
             }
             .buttonStyle(.plain)
         }
@@ -505,7 +505,7 @@ struct StartLineSheet: View {
                 }
                 .background(code.count >= 3 ? Theme.accent : Theme.surfaceAlt,
                             in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .foregroundStyle(code.count >= 3 ? .white : Theme.textFaint)
+                .foregroundStyle(code.count >= 3 ? Theme.base : Theme.dim)
                 .disabled(code.count < 3 || working)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 16)

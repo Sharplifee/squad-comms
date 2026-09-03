@@ -26,10 +26,10 @@ struct MicCard: View {
                 } label: {
                     Image(systemName: session.selfMuted ? "mic.slash.fill" : "mic.fill")
                         .font(.system(size: 19))
-                        .foregroundStyle(session.selfMuted ? Theme.muted : Theme.live)
+                        .foregroundStyle(session.selfMuted ? Theme.danger : Theme.signal)
                         .frame(width: 46, height: 46)
                         .background(
-                            Circle().fill((session.selfMuted ? Theme.muted : Theme.live).opacity(0.14))
+                            Circle().fill((session.selfMuted ? Theme.danger : Theme.signal).opacity(0.14))
                         )
                 }
                 .buttonStyle(.plain)

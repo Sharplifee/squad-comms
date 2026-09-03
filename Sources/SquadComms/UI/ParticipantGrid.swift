@@ -42,8 +42,8 @@ private struct SelfTile: View {
                 Text("YOU")
                     .font(.system(size: 9, weight: .semibold))
                     .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 4))
-                    .foregroundStyle(.white)
+                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: 4))
+                    .foregroundStyle(Theme.muted)
             }
         }
         .frame(maxWidth: .infinity)
@@ -163,7 +163,7 @@ private func avatar(_ text: String, speaking: Bool, muted: Bool) -> some View {
 
         Image(systemName: muted ? "mic.slash.fill" : (speaking ? "mic.fill" : "mic"))
             .font(.system(size: 11))
-            .foregroundStyle(muted ? Theme.muted : (speaking ? Theme.live : Theme.textFaint))
+            .foregroundStyle(muted ? Theme.danger : (speaking ? Theme.signal : Theme.dim))
             .frame(width: 24, height: 24)
             .background(Circle().fill(Theme.background))
             .offset(x: 5, y: 5)

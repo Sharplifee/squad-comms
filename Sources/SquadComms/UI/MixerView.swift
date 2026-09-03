@@ -139,7 +139,7 @@ struct MemberRow: View {
 
     private var symbolColour: Color {
         if isPrivate || theyOpenedPrivate { return Theme.warning }
-        if member.isMutedByMe             { return Theme.muted }
+        if member.isMutedByMe             { return Theme.danger }
         if member.isSpeaking              { return Theme.live }
         return Theme.textFaint
     }

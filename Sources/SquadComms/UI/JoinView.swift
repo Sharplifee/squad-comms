@@ -12,6 +12,6 @@ struct PrimaryButton: ButtonStyle {
             .padding(.vertical, 14)
             .background(Theme.accent.opacity(configuration.isPressed ? 0.7 : 1),
                         in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.base)
     }
 }

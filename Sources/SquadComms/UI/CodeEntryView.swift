@@ -72,7 +72,7 @@ struct CodeEntryView: View {
             }
             .background(ready ? Theme.accent : Theme.surfaceAlt,
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .foregroundStyle(ready ? .white : Theme.textFaint)
+            .foregroundStyle(ready ? Theme.base : Theme.dim)
             .disabled(!ready || working)
             .padding(.horizontal, 24)
             .padding(.bottom, 34)

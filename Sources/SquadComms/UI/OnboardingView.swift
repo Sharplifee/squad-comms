@@ -99,7 +99,7 @@ struct OnboardingView: View {
                 .padding(.vertical, 16)
             }
             .background(Theme.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.base)
             .disabled(requesting)
 
             if step < 2 {
@@ -130,7 +130,7 @@ struct OnboardingView: View {
             Image(systemName: granted[key] == true ? "checkmark.circle.fill"
                   : granted[key] == false ? "xmark.circle.fill" : "circle")
                 .foregroundStyle(granted[key] == true ? Theme.live
-                                 : granted[key] == false ? Theme.muted : Theme.textFaint)
+                                 : granted[key] == false ? Theme.danger : Theme.dim)
         }
         .padding(13)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
@@ -183,7 +183,7 @@ struct OnboardingView: View {
             }
             .background(ready ? Theme.accent : Theme.surfaceAlt,
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .foregroundStyle(ready ? .white : Theme.textFaint)
+            .foregroundStyle(ready ? Theme.base : Theme.dim)
             .disabled(!ready)
         }
         .padding(.horizontal, 26)
