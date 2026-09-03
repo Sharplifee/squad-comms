@@ -14,22 +14,21 @@ struct MainTabView: View {
 
     var body: some View {
         ZStack {
+            // Three tabs, down from five. Diagnostics moved into Settings —
+            // it is something you open when something is wrong, not a
+            // destination. Contacts folded into the Line screen's nearby flow
+            // and Settings, because "who can I call" and "who is here" were
+            // never really two questions.
             TabView {
-                HomeView(focus: focus)
-                    .tabItem { Label("Home", systemImage: "waveform.circle") }
+                LineView(focus: focus)
+                    .tabItem { Label("Line", systemImage: "waveform") }
 
                 SquadTabView()
                     .tabItem { Label("Squad", systemImage: "person.2") }
                     .badge(session.members.count)
 
-                ContactsView(backend: session.backend)
-                    .tabItem { Label("Contacts", systemImage: "person.crop.circle") }
-
-                AudioTabView()
-                    .tabItem { Label("Audio", systemImage: "slider.horizontal.3") }
-
-                DiagnosticsView()
-                    .tabItem { Label("Status", systemImage: "waveform.path.ecg") }
+                SettingsTabView()
+                    .tabItem { Label("Settings", systemImage: "gearshape") }
             }
 
             if focus.isActive {

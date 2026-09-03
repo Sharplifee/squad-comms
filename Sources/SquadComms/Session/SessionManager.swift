@@ -332,11 +332,13 @@ final class SessionManager: ObservableObject {
     /// the distinction people expect and the reason it is not called "hide".
     func applyPresence() {
         let prefs = PreferencesStore.shared.current
-        // Ghost mode erases the stored position server-side rather than only
+        // Hidden erases the stored position server-side rather than only
         // stopping new writes — otherwise your last known location sits there
         // indefinitely, which is the opposite of what was asked for.
-        Task { try? await backend.setGhostMode(deviceID: deviceID, ghost: prefs.ghostMode) }
-        if prefs.ghostMode {
+        let invisible = prefs.visibility != .visible
+        Task { try? await backend.setGhostMode(deviceID: deviceID,
+                                               ghost: prefs.visibility == .hidden) }
+        if invisible {
             proximity.stopAdvertising()
         } else if let squad, let me = UUID(uuidString: room.localParticipant.identity?.stringValue ?? "") {
             proximity.start(squadID: squad.id, selfID: me)

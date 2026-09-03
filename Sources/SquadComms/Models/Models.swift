@@ -93,6 +93,54 @@ enum SessionState: Equatable {
     case failed(String)
 }
 
+/// What happens to your music when somebody talks.
+///
+/// One question with three answers, collapsed from six controls that between
+/// them expressed a decision nobody revisits.
+enum MusicBehaviour: String, Codable, CaseIterable, Identifiable {
+    case turnDown, pauseAndRewind, leaveAlone
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .turnDown:       return "Turn it down"
+        case .pauseAndRewind: return "Pause and rewind"
+        case .leaveAlone:     return "Leave it alone"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .turnDown:       return "Drops to a whisper while they speak, then comes straight back."
+        case .pauseAndRewind: return "Stops, then jumps back a few seconds so you don't miss anything."
+        case .leaveAlone:     return "Voices come in over the top at full music volume."
+        }
+    }
+}
+
+/// Who can find you. Ghost mode and private session were both answering this,
+/// so they are one control rather than two toggles with a confusing overlap.
+enum Visibility: String, Codable, CaseIterable, Identifiable {
+    case visible, codeOnly, hidden
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .visible:  return "Visible nearby"
+        case .codeOnly: return "Code only"
+        case .hidden:   return "Hidden"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .visible:  return "People near you with the app can see you and start a line."
+        case .codeOnly: return "You won't show on anyone's radar. They need your code."
+        case .hidden:   return "Nobody can see you, and your stored location is erased."
+        }
+    }
+}
+
 enum NoiseSuppression: String, Codable, CaseIterable, Identifiable {
     case none, standard, active
     var id: String { rawValue }
@@ -130,6 +178,8 @@ struct Preferences: Codable, Equatable {
     /// Widens the proximity scan and slows the radar once a line is open.
     /// Continuous BLE scanning plus always-on VAD plus WebRTC will not survive
     /// a 90 minute session comfortably at full rate.
+    var musicBehaviour: MusicBehaviour = .turnDown
+    var visibility: Visibility = .visible
     var lowPowerMode: Bool = false
     /// A short tone on join, leave and end. The phone is in a pocket, so
     /// haptics and anything visual both miss entirely.

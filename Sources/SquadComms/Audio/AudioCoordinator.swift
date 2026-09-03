@@ -54,10 +54,18 @@ final class AudioCoordinator: ObservableObject {
         session.onRemoteSpeech = { [weak self] speaking in
             guard let self else { return }
             let prefs = PreferencesStore.shared.current
+            // The three-way music choice drives the existing duck machinery.
+            let behavior: DuckBehavior
+            switch prefs.musicBehaviour {
+            case .turnDown:       behavior = .duck
+            case .pauseAndRewind: behavior = .rewind
+            case .leaveAlone:     behavior = .duck   // nothing engages below
+            }
+            let ducks = prefs.musicBehaviour != .leaveAlone
             if speaking {
                 // Engage the system duck only while they are actually talking.
-                self.audioSession.setDucking(prefs.duckBehavior == .duck)
-                self.ducking.beginDuck(behavior: prefs.duckBehavior, level: prefs.duckLevel)
+                self.audioSession.setDucking(ducks && behavior == .duck)
+                if ducks { self.ducking.beginDuck(behavior: behavior, level: prefs.duckLevel) }
                 // Foldback steps back while someone else has the floor,
                 // otherwise you are listening to yourself and them at once.
                 self.selfMonitor.setSuppressed(true)
@@ -66,8 +74,10 @@ final class AudioCoordinator: ObservableObject {
                 self.autoPauseWork?.cancel()
                 self.autoPauseWork = nil
                 self.audioSession.setDucking(false)
-                self.ducking.endDuck(behavior: prefs.duckBehavior,
-                                     rewindSeconds: prefs.autoRewind ? prefs.rewindSeconds : 0)
+                if ducks {
+                    self.ducking.endDuck(behavior: behavior,
+                                         rewindSeconds: behavior == .rewind ? prefs.rewindSeconds : 0)
+                }
                 self.selfMonitor.setSuppressed(false)
             }
         }
