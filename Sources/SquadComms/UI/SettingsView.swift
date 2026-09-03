@@ -52,14 +52,6 @@ struct SettingsView: View {
                     Text("How you talk")
                 }
 
-                Section {
-                    Toggle("Voice commands", isOn: $prefs.voiceCommandsEnabled)
-                    if prefs.voiceCommandsEnabled {
-                        ForEach(CommandEngine.Command.allCases, id: \.rawValue) { command in
-                            Text("\"\(command.rawValue)\"")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
                     }
                 } header: {
                     Text("Hands-free")

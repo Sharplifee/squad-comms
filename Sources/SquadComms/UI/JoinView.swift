@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The join screen is gone on purpose. squad comms opens straight into the
-/// line — see SessionManager.openLine(). Bringing somebody in is an action you
+/// line. Bringing somebody in is an action you
 /// take from inside the app (share the code, or enter theirs), not a wall you
 /// stand behind before anything works.
 struct PrimaryButton: ButtonStyle {

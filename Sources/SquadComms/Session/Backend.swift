@@ -32,54 +32,63 @@ struct Backend {
     /// real race — at a gym it is the *expected* case, since you agree on a
     /// code and both open the app — and a client-side check would let both win
     /// and land them in different rooms with the same code on screen.
-    func joinOrCreateSquad(code: String, name: String) async throws -> Squad {
-        guard let client else { throw BackendError.notConfigured }
-        let rows: [Squad] = try await client
-            .rpc("join_or_create_squad", params: ["p_code": code, "p_name": name])
-            .execute()
-            .value
-        guard let squad = rows.first else { throw BackendError.codeNotFound }
-        return squad
-    }
-
-    // MARK: - Contacts
-
-    struct ContactRow: Decodable {
-        let phoneHash: String
-        let displayName: String
-        let lastSeenAt: Date?
+    /// Outcome of a join or create. Typed rather than a bare optional so the
+    /// UI can say what actually happened — "that code is full" and "that code
+    /// doesn't exist" send people to different actions.
+    struct SquadOutcome: Decodable {
+        let outcome: String
+        let retryAfter: Int?
+        let squadID: UUID?
+        let squadName: String?
+        let joinCode: String?
 
         enum CodingKeys: String, CodingKey {
-            case phoneHash   = "phone_hash"
-            case displayName = "display_name"
-            case lastSeenAt  = "last_seen_at"
+            case outcome    = "r_outcome"
+            case retryAfter = "r_retry_after"
+            case squadID    = "r_squad_id"
+            case squadName  = "r_squad_name"
+            case joinCode   = "r_join_code"
+        }
+
+        var squad: Squad? {
+            guard let squadID, let joinCode else { return nil }
+            return Squad(id: squadID, name: squadName ?? "Squad",
+                         joinCode: joinCode, createdAt: nil)
         }
     }
 
-    /// Ask which of these hashes belong to somebody with the app. Only hashes
-    /// cross the wire — see ContactMatcher for why that is the whole design.
-    func matchContacts(hashes: [String]) async throws -> [ContactRow] {
+    /// Join an existing line. Never creates one.
+    ///
+    /// Joining and creating are separate calls on purpose. When a miss quietly
+    /// created a squad, a brute-force sweep never registered a single failure,
+    /// so the server-side backoff could never engage and the table filled with
+    /// abandoned rooms.
+    func joinSquad(code: String, deviceID: String) async throws -> SquadOutcome {
         guard let client else { throw BackendError.notConfigured }
-        return try await client
-            .rpc("match_contacts", params: ["p_hashes": hashes])
-            .execute()
-            .value
+        struct P: Encodable { let p_code: String; let p_device_id: String }
+        let rows: [SquadOutcome] = try await client
+            .rpc("join_squad", params: P(p_code: code, p_device_id: deviceID))
+            .execute().value
+        guard let first = rows.first else { throw BackendError.codeNotFound }
+        return first
     }
 
-    func registerDevice(deviceID: String, displayName: String,
-                        phoneHash: String?, ghost: Bool) async throws {
+    /// Open a new line on a chosen code. Refuses a code already live.
+    func createSquad(code: String, name: String, deviceID: String) async throws -> SquadOutcome {
         guard let client else { throw BackendError.notConfigured }
-        struct Params: Encodable {
-            let p_device_id: String
-            let p_display_name: String
-            let p_phone_hash: String?
-            let p_ghost: Bool
-            let p_identity: String
-        }
-        _ = try await client.rpc("register_device", params: Params(
-            p_device_id: deviceID, p_display_name: displayName,
-            p_phone_hash: phoneHash, p_ghost: ghost, p_identity: deviceID
-        )).execute()
+        struct P: Encodable { let p_code: String; let p_name: String; let p_device_id: String }
+        let rows: [SquadOutcome] = try await client
+            .rpc("create_squad", params: P(p_code: code, p_name: name, p_device_id: deviceID))
+            .execute().value
+        guard let first = rows.first else { throw BackendError.notConfigured }
+        return first
+    }
+
+    /// Close a line for everyone and free its code for reuse.
+    func endSquad(id: UUID) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_squad_id: String }
+        _ = try await client.rpc("end_squad", params: P(p_squad_id: id.uuidString)).execute()
     }
 
     func squad(forCode code: String) async throws -> Squad {

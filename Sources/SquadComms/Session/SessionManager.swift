@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Combine
 import LiveKit
 
@@ -9,6 +10,21 @@ final class SessionManager: ObservableObject {
     /// Wire events between squad members. Private-line events carry the
     /// intended recipient, because a direct line is only private if the other
     /// devices can tell it was not addressed to them.
+    enum SessionError: LocalizedError {
+        case timedOut
+        case offline
+
+        var errorDescription: String? {
+            switch self {
+            // Deliberately different copy: one means try again, the other
+            // means fix your connection first. Showing the same message for
+            // both sends people to the wrong fix.
+            case .timedOut: return "The server didn't answer. Try again."
+            case .offline:  return "You're offline. Check your connection."
+            }
+        }
+    }
+
     enum DataEvent: Codable, Equatable {
         case speechStart
         case speechEnd
@@ -86,119 +102,67 @@ final class SessionManager: ObservableObject {
         await join(code: code)
     }
 
+    /// A stable per-install identifier for rate limiting.
+    ///
+    /// identifierForVendor resets if every app from the vendor is deleted,
+    /// which is acceptable — this exists to slow a sweep, not to track anyone.
+    private var deviceID: String {
+        UIDevice.current.identifierForVendor?.uuidString ?? "unknown-device"
+    }
+
+    /// Open a NEW line on a chosen code.
     func create(name: String, code: String) async {
         state = .connecting
         do {
-            let squad = try await backend.joinOrCreateSquad(code: code, name: name)
-            self.squad = squad
-            try await connect(to: squad)
+            let result = try await withTimeout(Self.connectTimeout) {
+                try await self.backend.createSquad(code: code, name: name, deviceID: self.deviceID)
+            }
+            switch result.outcome {
+            case "ok":
+                guard let squad = result.squad else { throw SessionError.timedOut }
+                try await connect(to: squad)
+            case "taken":
+                // Somebody is live on that code right now. Dropping the caller
+                // into a stranger's open microphone is the one outcome that
+                // must never happen silently.
+                state = .failed("That code is already in use. Pick another, or join it instead.")
+            case "invalid":
+                state = .failed("Codes are 3 to 8 digits.")
+            default:
+                state = .failed("Couldn't open the line.")
+            }
         } catch {
             state = .failed(friendly(error))
         }
     }
 
+    /// Join an EXISTING line. Never creates one.
     func join(code: String) async {
         state = .connecting
         do {
-            let squad = try await backend.squad(forCode: code)
-            try await connect(to: squad)
-        } catch {
-            state = .failed(friendly(error))
-        }
-    }
-
-    /// Close the line for everyone in it.
-    ///
-    /// Distinct from leaving. If you started a session for a workout that is
-    /// over, walking out and leaving three people connected to an empty room
-    /// is not what you meant — but neither is kicking everyone every time you
-    /// personally need to go. The two are separate actions because they are
-    /// separate intentions.
-    func endForEveryone() async {
-        broadcast(.sessionEnded)
-        // Give the message a moment to actually leave before tearing down the
-        // room it travels over.
-        try? await Task.sleep(nanoseconds: 250_000_000)
-        await leave()
-    }
-
-    private func handleSessionEnded() async {
-        endedByHost = true
-        await leave()
-    }
-
-    func leave() async {
-        await room.disconnect()
-        proximity.stop()
-        UserDefaults.standard.removeObject(forKey: "squadcomms.lastCode")
-        squad = nil
-        members = []
-        state = .idle
-    }
-
-    func reset() { state = .idle }
-
-    /// Tear the room down and rejoin the same squad.
-    ///
-    /// LiveKit reconnects on its own for ordinary drops, but it cannot recover
-    /// from a session whose token has expired or whose room was closed
-    /// server-side — those look identical from the app and leave you connected
-    /// to nothing. This is the manual escape hatch behind Status.
-    func reconnectIfNeeded() async {
-        guard let squad else { return }
-        await room.disconnect()
-        state = .connecting
-        do {
-            try await connect(to: squad)
-        } catch {
-            state = .failed(friendly(error))
-        }
-    }
-
-    /// Open the line without asking anything.
-    ///
-    /// A code screen on an always-on audio app is a contradiction: it puts a
-    /// lock in front of the one thing the app promises. So on launch we
-    /// rejoin the last squad silently, and if there has never been one we
-    /// create it rather than presenting an empty six-digit field to someone
-    /// who has nothing to type into it. The code still exists — it is how you
-    /// bring somebody else in — it just is not a gate any more.
-    func openLine() async {
-        guard case .idle = state else { return }
-
-        guard let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode"),
-              !code.isEmpty else {
-            // No code yet. The person picks one during onboarding rather than
-            // being handed a generated squad they never asked for.
-            state = .needsCode
-            return
-        }
-
-        await joinOrCreate(code: code)
-    }
-
-    /// Join the squad on this code, or create it if nobody has yet.
-    ///
-    /// The code IS the squad. Two people who agree on "742" both end up in the
-    /// same room regardless of who opened the app first, which is the whole
-    /// point of letting people choose it — you can say it out loud instead of
-    /// reading six digits off a screen.
-    /// The code IS the squad. Whoever opens it first creates it, everyone
-    /// after joins, and the server resolves the race — so there is no host, no
-    /// invite to accept, and no order anyone has to do things in.
-    func joinOrCreate(code: String) async {
-        UserDefaults.standard.set(code, forKey: "squadcomms.lastCode")
-        await createWithRetry(code: code)
-    }
-
-    private func createWithRetry(code: String) async {
-        for delay in [0.0, 1.5, 4.0] {
-            if delay > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                state = .idle
+            let result = try await withTimeout(Self.connectTimeout) {
+                try await self.backend.joinSquad(code: code, deviceID: self.deviceID)
             }
-            await create(name: defaultSquadName, code: code)
-            if case .connected = state { return }
+            switch result.outcome {
+            case "ok":
+                guard let squad = result.squad else { throw SessionError.timedOut }
+                try await connect(to: squad)
+            case "rate_limited":
+                let wait = result.retryAfter ?? 60
+                state = .failed("Too many attempts. Try again in \(wait / 60 > 0 ? "\(wait / 60) min" : "\(wait)s").")
+            case "not_found":
+                state = .failed("No line open on that code.")
+            case "expired":
+                state = .failed("That line has ended.")
+            case "full":
+                state = .failed("That line is full.")
+            case "invalid":
+                state = .failed("Codes are 3 to 8 digits.")
+            default:
+                state = .failed("Couldn't join.")
+            }
+        } catch {
+            state = .failed(friendly(error))
         }
     }
 
@@ -207,10 +171,39 @@ final class SessionManager: ObservableObject {
         return me.isEmpty ? "My squad" : "\(me)'s squad"
     }
 
+    /// Ten seconds, then give up with something the user can act on.
+    ///
+    /// There was no timeout anywhere, so any backend hang left the app on
+    /// "Opening the line" forever with no way out but force-quitting. A
+    /// spinner that can never end is worse than an error, because an error at
+    /// least tells you to try again.
+    private static let connectTimeout: TimeInterval = 10
+
+    private func withTimeout<T>(_ seconds: TimeInterval,
+                                _ operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw SessionError.timedOut
+            }
+            guard let first = try await group.next() else { throw SessionError.timedOut }
+            group.cancelAll()
+            return first
+        }
+    }
+
     private func connect(to squad: Squad) async throws {
-        let token = try await backend.token(for: squad.id,
-                                            displayName: PreferencesStore.shared.current.displayName)
-        try await room.connect(url: Config.liveKitURL, token: token)
+        // Every network hop gets a ceiling, not just the LiveKit connect —
+        // an Edge Function that never answers stranded the app just as
+        // effectively as a room that never joined.
+        let token = try await withTimeout(Self.connectTimeout) {
+            try await self.backend.token(for: squad.id,
+                                         displayName: PreferencesStore.shared.current.displayName)
+        }
+        try await withTimeout(Self.connectTimeout) {
+            try await self.room.connect(url: Config.liveKitURL, token: token)
+        }
         try await room.localParticipant.setMicrophone(enabled: false)
 
         self.squad = squad
@@ -416,6 +409,10 @@ final class SessionManager: ObservableObject {
     }
 
     private func friendly(_ error: Error) -> String {
+        // No network and a silent server need different words, because they
+        // need different actions from the person reading them.
+        if !NetworkReachability.isOnline { return SessionError.offline.errorDescription! }
+        if case SessionError.timedOut = error { return SessionError.timedOut.errorDescription! }
         if !Config.isConfigured { return "The app isn't configured yet — LiveKit and Supabase keys are missing." }
         return error.localizedDescription
     }

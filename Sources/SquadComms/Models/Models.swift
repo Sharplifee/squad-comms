@@ -132,7 +132,6 @@ struct Preferences: Codable, Equatable {
     var duckBehavior: DuckBehavior = .duck
     var duckLevel: Double = 0.10          // 10% of current volume
     var rewindSeconds: Double = 8
-    var voiceCommandsEnabled: Bool = true
     var openMic: Bool = true              // VAD on; false = push to talk
     var vadOnsetDB: Float = -20
     var vadSilenceDB: Float = -40

@@ -1,6 +1,5 @@
 import SwiftUI
 import AVFoundation
-import Speech
 import Contacts
 
 /// First run: what it is, then who you are.
@@ -82,7 +81,6 @@ struct OnboardingView: View {
             if step == 2 {
                 VStack(spacing: 9) {
                     permissionRow("mic", "Microphone", "So your squad can hear you", key: "mic")
-                    permissionRow("waveform", "Speech", "For hands-free commands", key: "speech")
                     permissionRow("dot.radiowaves.left.and.right", "Bluetooth", "To see who's near you", key: "bt")
                 }
                 .padding(.top, 28)
@@ -204,17 +202,14 @@ struct OnboardingView: View {
     private func requestPermissions() {
         requesting = true
         AVAudioApplication.requestRecordPermission { micOK in
-            DispatchQueue.main.async { granted["mic"] = micOK }
-            SFSpeechRecognizer.requestAuthorization { speechStatus in
-                DispatchQueue.main.async {
-                    granted["speech"] = (speechStatus == .authorized)
-                    // Bluetooth has no request API — the prompt appears the
-                    // first time a CBCentralManager is created, which happens
-                    // when a line opens.
-                    granted["bt"] = true
-                    requesting = false
-                    step = 3
-                }
+            DispatchQueue.main.async {
+                granted["mic"] = micOK
+                // Bluetooth has no request API — the prompt appears the first
+                // time a CBCentralManager is created, which happens when a line
+                // opens.
+                granted["bt"] = true
+                requesting = false
+                step = 3
             }
         }
     }

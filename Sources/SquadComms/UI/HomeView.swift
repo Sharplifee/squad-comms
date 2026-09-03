@@ -392,7 +392,7 @@ struct SwitchSquadSheet: View {
                         .submitLabel(.go)
                         .onSubmit {
                             guard code.count >= 3 else { return }
-                            Task { await session.joinOrCreate(code: code); dismiss() }
+                            Task { await session.join(code: code); dismiss() }
                         }
                         .padding(.vertical, 8)
                 } footer: {
@@ -444,7 +444,8 @@ struct StartLineSheet: View {
                 Button {
                     working = true
                     Task {
-                        await session.joinOrCreate(code: code)
+                        await session.create(name: "\(PreferencesStore.shared.current.displayName)'s squad",
+                                             code: code)
                         working = false
                         dismiss()
                     }

@@ -92,7 +92,9 @@ struct CodeEntryView: View {
     private func open() {
         working = true
         Task {
-            await session.joinOrCreate(code: code)
+            // First run always creates — there is nothing to rejoin yet.
+            await session.create(name: "\(PreferencesStore.shared.current.displayName)'s squad",
+                                 code: code)
             working = false
         }
     }

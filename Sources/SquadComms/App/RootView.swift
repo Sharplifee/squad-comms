@@ -20,7 +20,7 @@ struct RootView: View {
 
     /// The app opens on the dashboard. Always.
     ///
-    /// It used to call openLine() on appear, which meant launch was a spinner
+    /// It used to open a line on appear, which meant launch was a spinner
     /// while a squad was created or rejoined before anything was usable. There
     /// is no reason to hold a line open before somebody asks for one — opening
     /// the app is not the same as starting a session.
@@ -46,12 +46,17 @@ struct FailureView: View {
             Text(message)
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
             // reset() alone only returned to .idle and left the user staring
-            // at a spinner, because nothing re-drove openLine(). Retry has to
+            // at a spinner, because nothing re-drove the connect. Retry has to
             // actually retry.
             Button("Try again") {
                 Task {
                     session.reset()
-                    await session.openLine()
+                    // Retry means rejoin the code we were told to open, not
+                    // create a fresh squad — creating one would strand the
+                    // person you were trying to reach on the original code.
+                    if let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode") {
+                        await session.join(code: code)
+                    }
                 }
             }
             .buttonStyle(PrimaryButton())
