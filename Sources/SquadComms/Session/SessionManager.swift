@@ -225,6 +225,8 @@ final class SessionManager: ObservableObject {
         }
         sessionStart = Date()
         state = .connected
+        SavedSquadStore.shared.remember(code: squad.joinCode, name: squad.name,
+                                        members: members.map(\.displayName))
         Telemetry.event("session_connected", ["squad": squad.id.uuidString])
     }
 
@@ -533,6 +535,13 @@ extension SessionManager: RoomDelegate {
             }
             if !members.contains(where: { $0.id == id }) {
                 members.append(Member(id: id, displayName: name))
+                if let squad {
+                    SavedSquadStore.shared.remember(code: squad.joinCode, name: squad.name,
+                                                    members: members.map(\.displayName))
+                }
+                // The phone is in a pocket, so a haptic and anything visual
+                // both miss entirely.
+                PrivateLineTones.joined()
             }
         }
     }
@@ -541,6 +550,7 @@ extension SessionManager: RoomDelegate {
         Task { @MainActor in
             guard let id = UUID(uuidString: participant.identity?.stringValue ?? "") else { return }
             members.removeAll { $0.id == id }
+            PrivateLineTones.left()
             speakingRemotes.remove(id)
             onRemoteSpeech?(!speakingRemotes.isEmpty)
         }

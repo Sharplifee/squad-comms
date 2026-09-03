@@ -103,6 +103,25 @@ struct AudioTabView: View {
                 }
 
                 Section {
+                    Toggle(isOn: $prefs.lowPowerMode) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Low power")
+                            Text("Slows the radar once a line is open. Longer sessions, slightly laggier distances.")
+                                .font(.caption).foregroundStyle(Theme.textDim)
+                        }
+                    }
+                    Toggle(isOn: $prefs.soundCues) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Sound cues")
+                            Text("A short tone when somebody joins or leaves — your phone is in a pocket.")
+                                .font(.caption).foregroundStyle(Theme.textDim)
+                        }
+                    }
+                } header: {
+                    Text("Battery and feedback")
+                }
+
+                Section {
                     LabeledContent("Input level",
                                    value: String(format: "%.0f dB", audio.inputLevelDB))
                     LabeledContent("Sample rate", value: "48 kHz")

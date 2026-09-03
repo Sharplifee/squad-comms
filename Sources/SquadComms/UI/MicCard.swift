@@ -108,6 +108,9 @@ struct MicCard: View {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Theme.warning)
                     .frame(width: 4, height: 44)
+                    // The visible marker is 4pt wide; the grabbable area is
+                    // 44, which is the minimum a thumb can reliably hit.
+                    .contentShape(Rectangle().size(width: 44, height: 44))
                     .offset(x: threshold * width - 2)
                     .gesture(
                         DragGesture(minimumDistance: 0)
@@ -119,6 +122,18 @@ struct MicCard: View {
             }
         }
         .frame(height: 44)
+        // The bars are decorative — the number and the state below say
+        // everything the meter shows.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Transmit threshold")
+        .accessibilityValue("\(Int(prefs.vadOnsetDB)) decibels, \(sensitivityWord)")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: prefs.vadOnsetDB = min(prefs.vadOnsetDB + 2, -12)
+            case .decrement: prefs.vadOnsetDB = max(prefs.vadOnsetDB - 2, -55)
+            default: break
+            }
+        }
     }
 
     private func barHeight(at position: Double, lit: Bool) -> CGFloat {

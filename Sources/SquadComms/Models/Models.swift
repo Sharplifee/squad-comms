@@ -127,6 +127,13 @@ struct Preferences: Codable, Equatable {
     /// List gives you the sliders; tiles give you faces you can read across a
     /// room. Persisted because it is a standing preference, not a mode.
     var squadViewIsList: Bool = false
+    /// Widens the proximity scan and slows the radar once a line is open.
+    /// Continuous BLE scanning plus always-on VAD plus WebRTC will not survive
+    /// a 90 minute session comfortably at full rate.
+    var lowPowerMode: Bool = false
+    /// A short tone on join, leave and end. The phone is in a pocket, so
+    /// haptics and anything visual both miss entirely.
+    var soundCues: Bool = true
     var ghostMode: Bool = false
     var privateSession: Bool = false
     var duckBehavior: DuckBehavior = .duck

@@ -20,6 +20,19 @@ enum PrivateLineTones {
     /// Falling pair, quieter. Your own direct line has opened.
     static func outgoing() { play(frequencies: [880, 660], duration: 0.07, gain: 0.22) }
 
+    /// Somebody joined the line. Rising third — arrivals go up.
+    static func joined() {
+        guard PreferencesStore.shared.current.soundCues else { return }
+        play(frequencies: [587, 784], duration: 0.08, gain: 0.20)
+    }
+
+    /// Somebody left. The same interval falling, so the two are unmistakable
+    /// from each other without looking.
+    static func left() {
+        guard PreferencesStore.shared.current.soundCues else { return }
+        play(frequencies: [784, 587], duration: 0.08, gain: 0.18)
+    }
+
     /// Single soft note. The private line has closed and you are back on the squad.
     static func closed() { play(frequencies: [520], duration: 0.10, gain: 0.18) }
 

@@ -21,7 +21,10 @@ enum Theme {
     // MARK: - Text
     static let text        = Color.primary
     static let textDim     = Color.secondary
-    static let textFaint   = Color(.tertiaryLabel)
+    /// tertiaryLabel fails AA against the grouped background for anything
+    /// bigger than a caption, so it is reserved for decoration and icons.
+    /// Anything carrying words uses textDim.
+    static let textFaint   = Color(.secondaryLabel).opacity(0.85)
 
     // MARK: - Meaning
     /// Actionable and live. Kept to the system tint so the app matches every

@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var copied = false
     @State private var showStart = false
     @State private var showEndOptions = false
+    @StateObject private var saved = SavedSquadStore.shared
     @EnvironmentObject private var toasts: ToastCenter
     @State private var prefs = PreferencesStore.shared.current
 
@@ -25,6 +26,7 @@ struct HomeView: View {
                 }
 
                 if session.squad == nil {
+                    if !saved.squads.isEmpty { savedSection }
                     idleSection
                 } else if session.members.isEmpty {
                     liveCodeSection
@@ -314,6 +316,50 @@ struct HomeView: View {
     }
 
     // MARK: - Invite
+
+    /// The squads you keep coming back to.
+    ///
+    /// The same two people were re-sharing a fresh code every day for a line
+    /// they open every day. This only works because codes are chosen rather
+    /// than generated — a generated one would be different tomorrow.
+    private var savedSection: some View {
+        Section {
+            ForEach(saved.squads) { squad in
+                Button {
+                    Task { await session.join(code: squad.code) }
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(squad.code)
+                            .font(.subheadline.monospaced())
+                            .foregroundStyle(Theme.textDim)
+                            .frame(width: 54, height: 40)
+                            .background(Theme.surfaceAlt,
+                                        in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(squad.name).foregroundStyle(Theme.text)
+                            Text(squad.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(Theme.textDim)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(Theme.textFaint)
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) { saved.forget(squad) } label: {
+                        Label("Remove", systemImage: "trash")
+                    }
+                }
+            }
+        } header: {
+            Text("Your squads")
+        } footer: {
+            Text("Same code every time. Tap one to open it again.")
+        }
+    }
 
     // MARK: - Idle
 

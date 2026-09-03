@@ -16,6 +16,9 @@ struct PlateRadarView: View {
     let isScanning: Bool
 
     @State private var pulse = false
+    /// A rotating sweep is exactly the kind of continuous motion Reduce Motion
+    /// exists to stop, and this one runs for the whole session.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geo in
@@ -33,7 +36,30 @@ struct PlateRadarView: View {
             .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
         .aspectRatio(1, contentMode: .fit)
-        .onAppear { pulse = true }
+        .onAppear { pulse = !reduceMotion }
+        // VoiceOver cannot read a picture of dots. The radar is the primary
+        // content of this screen, so it has to say who is present and how far.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenSummary)
+    }
+
+    /// What the radar would tell you if you could see it.
+    private var spokenSummary: String {
+        guard !contacts.isEmpty else {
+            return "Radar. Range \(ProximityEngine.rangeLabels[rangeIndex]). Nobody in range."
+        }
+        let people = contacts.map { contact -> String in
+            let name = names[contact.id] ?? "Unknown device"
+            let metres = contact.metres
+            let distance = metres < 91
+                ? "\(Int((metres * 3.28084).rounded())) feet"
+                : String(format: "%.1f miles", metres / 1609.34)
+            let speaking = contact.id == speakingID ? ", speaking" : ""
+            return "\(name), \(distance)\(speaking)"
+        }
+        return "Radar. Range \(ProximityEngine.rangeLabels[rangeIndex]). "
+             + "^[\(contacts.count) person](inflect: true) in range: "
+             + people.joined(separator: ". ")
     }
 
     // MARK: - Rings
@@ -97,7 +123,8 @@ struct PlateRadarView: View {
                         .fill(Theme.live.opacity(0.25))
                         .frame(width: 40, height: 40)
                         .scaleEffect(pulse ? 1.15 : 0.85)
-                        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                        .animation(reduceMotion ? nil
+                                   : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
                                    value: pulse)
                 }
                 Circle()

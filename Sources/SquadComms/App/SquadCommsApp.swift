@@ -3,6 +3,7 @@ import UIKit
 
 @main
 struct SquadCommsApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var session = SessionManager()
     @StateObject private var audio = AudioCoordinator()
@@ -17,6 +18,11 @@ struct SquadCommsApp: App {
                     Telemetry.start()
                     audio.attach(session: session)
                     await session.restoreLastSession()
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    // The radar updates a picture nobody can see while
+                    // backgrounded, and BLE scanning is not free.
+                    session.proximity.setSuspended(phase != .active)
                 }
         }
     }

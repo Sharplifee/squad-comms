@@ -52,6 +52,7 @@ final class ProximityEngine: NSObject, ObservableObject {
     /// the contact already on the radar instead of spawning a duplicate.
     private var fingerprintIdentity: [DeviceFingerprint: UUID] = [:]
     private var pruneTimer: Timer?
+    private var isSuspended = false
 
     private static let serviceUUID = CBUUID(string: "9F2A1C34-6B70-4E1D-9C2F-5A8E3D71B0C4")
     private static let nearThresholdRSSI = -65
@@ -82,6 +83,31 @@ final class ProximityEngine: NSObject, ObservableObject {
     /// You still see everyone; nobody sees you. Audio is untouched.
     func stopAdvertising() {
         peripheral?.stopAdvertising()
+    }
+
+    /// Backgrounded, or in low power. Scanning while the screen is off burns
+    /// battery to update a radar nobody can see.
+    func setSuspended(_ suspended: Bool) {
+        guard suspended != isSuspended else { return }
+        isSuspended = suspended
+        if suspended {
+            central?.stopScan()
+            Task { @MainActor in self.isScanning = false }
+        } else if central?.state == .poweredOn {
+            beginScan()
+        }
+    }
+
+    /// Duplicate discoveries are what let the radar move at all, but they also
+    /// arrive constantly. In low power we drop to a single discovery per
+    /// device and let the smoothing coast between updates.
+    private func beginScan() {
+        let duplicates = !PreferencesStore.shared.current.lowPowerMode
+        central?.scanForPeripherals(
+            withServices: [Self.serviceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: duplicates]
+        )
+        Task { @MainActor in self.isScanning = true }
     }
 
     func stop() {
@@ -186,11 +212,11 @@ extension ProximityEngine: CBCentralManagerDelegate {
             Task { @MainActor in self.isScanning = false }
             return
         }
-        // Duplicates ON — we need a continuous RSSI stream to smooth, not a
-        // single discovery event. This is the whole reason the radar can move.
-        manager.scanForPeripherals(withServices: [Self.serviceUUID],
-                                   options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
-        Task { @MainActor in self.isScanning = true }
+        // Duplicates give a continuous RSSI stream to smooth, which is the
+        // whole reason the radar can move. beginScan decides whether we can
+        // afford them right now.
+        guard !isSuspended else { return }
+        beginScan()
     }
 
     func centralManager(_ manager: CBCentralManager,
