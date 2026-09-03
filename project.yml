@@ -27,12 +27,14 @@ targets:
       - path: Sources/SquadComms
       - path: Sources/SquadComms/Resources/Assets.xcassets
         type: folder
+      # Required since 2024. Missing manifest is an upload rejection.
+      - path: Sources/SquadComms/Resources/PrivacyInfo.xcprivacy
     info:
       path: Sources/SquadComms/Support/Info.plist
       properties:
         CFBundleDisplayName: squad comms
         CFBundleShortVersionString: "1.1"
-        CFBundleVersion: "9"
+        CFBundleVersion: "10"
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: squad comms uses your microphone so your squad hears you without touching your phone.

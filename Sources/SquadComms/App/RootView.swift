@@ -16,6 +16,7 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: onboarded)
+        .task { await session.loadBlocks() }
     }
 
     /// The app opens on the dashboard. Always.

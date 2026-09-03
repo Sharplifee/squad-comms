@@ -51,6 +51,17 @@ struct SettingsView: View {
                 } header: {
                     Text("How you talk")
                 }
+
+                Section {
+                    NavigationLink { BlockedListView() } label: {
+                        Label("Blocked", systemImage: "hand.raised")
+                    }
+                    NavigationLink { DeleteDataView() } label: {
+                        Label("Your data", systemImage: "trash")
+                    }
+                } header: {
+                    Text("Safety and privacy")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

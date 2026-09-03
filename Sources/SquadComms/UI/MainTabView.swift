@@ -153,6 +153,7 @@ struct SquadTabView: View {
 struct RoutingCard: View {
     let member: Member
     @EnvironmentObject private var session: SessionManager
+    @State private var reporting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -193,6 +194,12 @@ struct RoutingCard: View {
                 set: { session.setMutedToThem(!$0, for: member); Haptics.selection() }
             ))
             .font(.subheadline)
+
+            Button(role: .destructive) { reporting = true } label: {
+                Label("Block and report", systemImage: "hand.raised")
+                    .font(.subheadline)
+            }
+            .sheet(isPresented: $reporting) { ReportSheet(member: member) }
         }
         .padding(.vertical, 4)
     }

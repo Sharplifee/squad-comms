@@ -133,6 +133,72 @@ struct Backend {
         )).execute()
     }
 
+    // MARK: - Safety
+
+    struct BlockedRow: Decodable, Identifiable {
+        let deviceID: String
+        let displayName: String
+        let blockedAt: Date?
+        var id: String { deviceID }
+
+        enum CodingKeys: String, CodingKey {
+            case deviceID    = "device_id"
+            case displayName = "display_name"
+            case blockedAt   = "blocked_at"
+        }
+    }
+
+    /// Reporting always blocks as well. Asking "and would you also like to
+    /// stop hearing them?" immediately after somebody reports abuse is a bad
+    /// question.
+    func report(reporter: String, reported: String, squadID: UUID?,
+                reason: String, detail: String?) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable {
+            let p_reporter: String; let p_reported: String
+            let p_squad: String?;   let p_reason: String; let p_detail: String?
+        }
+        _ = try await client.rpc("report_device", params: P(
+            p_reporter: reporter, p_reported: reported,
+            p_squad: squadID?.uuidString, p_reason: reason, p_detail: detail
+        )).execute()
+    }
+
+    func block(blocker: String, blocked: String) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_blocker: String; let p_blocked: String }
+        _ = try await client.rpc("block_device", params: P(p_blocker: blocker, p_blocked: blocked)).execute()
+    }
+
+    func unblock(blocker: String, blocked: String) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_blocker: String; let p_blocked: String }
+        _ = try await client.rpc("unblock_device", params: P(p_blocker: blocker, p_blocked: blocked)).execute()
+    }
+
+    func blockedList(blocker: String) async throws -> [BlockedRow] {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_blocker: String }
+        return try await client.rpc("blocked_devices", params: P(p_blocker: blocker)).execute().value
+    }
+
+    /// There is no account, but there is a devices row, and it has to be
+    /// erasable from inside the app.
+    func deleteMyData(deviceID: String) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_device_id: String }
+        _ = try await client.rpc("delete_device", params: P(p_device_id: deviceID)).execute()
+    }
+
+    /// Ghost mode erases stored coordinates rather than merely halting writes.
+    /// Stopping writes leaves your last known position on the server forever,
+    /// which is exactly what somebody enabling it is trying to prevent.
+    func setGhostMode(deviceID: String, ghost: Bool) async throws {
+        guard let client else { throw BackendError.notConfigured }
+        struct P: Encodable { let p_device_id: String; let p_ghost: Bool }
+        _ = try await client.rpc("set_ghost_mode", params: P(p_device_id: deviceID, p_ghost: ghost)).execute()
+    }
+
     func squad(forCode code: String) async throws -> Squad {
         guard let client else { throw BackendError.notConfigured }
         let rows: [Squad] = try await client.from("squads")

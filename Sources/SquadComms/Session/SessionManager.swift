@@ -54,6 +54,9 @@ final class SessionManager: ObservableObject {
     /// Set when somebody else closed the line, so the UI can say so rather
     /// than looking like a disconnection.
     @Published var endedByHost = false
+    /// Blocked device ids, applied on join so a blocked person cannot reach
+    /// you by starting a fresh session.
+    @Published private(set) var blockedIDs: Set<String> = []
 
     /// Our own LiveKit identity, used to tell whether an inbound private line
     /// was addressed to this device.
@@ -96,6 +99,13 @@ final class SessionManager: ObservableObject {
     }
 
     // MARK: - Lifecycle
+
+    /// Blocks are loaded before anything connects, so a blocked person is
+    /// silent from the first packet rather than after a round trip.
+    func loadBlocks() async {
+        let rows = (try? await backend.blockedList(blocker: deviceID)) ?? []
+        blockedIDs = Set(rows.map(\.deviceID))
+    }
 
     func restoreLastSession() async {
         guard let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode") else { return }
@@ -269,6 +279,39 @@ final class SessionManager: ObservableObject {
         }
     }
 
+    // MARK: - Safety
+
+    func report(member: Member, reason: String, detail: String?) async {
+        try? await backend.report(reporter: deviceID, reported: member.id.uuidString,
+                                  squadID: squad?.id, reason: reason, detail: detail)
+        // Take effect immediately rather than waiting for a round trip — the
+        // person is still audible while the request is in flight.
+        setMuted(true, for: member)
+        blockedIDs.insert(member.id.uuidString)
+    }
+
+    func block(member: Member) async {
+        try? await backend.block(blocker: deviceID, blocked: member.id.uuidString)
+        setMuted(true, for: member)
+        blockedIDs.insert(member.id.uuidString)
+    }
+
+    func unblock(deviceID target: String) async {
+        try? await backend.unblock(blocker: deviceID, blocked: target)
+        blockedIDs.remove(target)
+    }
+
+    func blockedList() async -> [Backend.BlockedRow] {
+        (try? await backend.blockedList(blocker: deviceID)) ?? []
+    }
+
+    func deleteMyData() async {
+        try? await backend.deleteMyData(deviceID: deviceID)
+        await leave()
+        UserDefaults.standard.removeObject(forKey: "squadcomms.lastCode")
+        UserDefaults.standard.removeObject(forKey: "squadcomms.onboarded")
+    }
+
     func setMicrophone(enabled: Bool) {
         guard !selfMuted else { return }
         Task { try? await room.localParticipant.setMicrophone(enabled: enabled) }
@@ -287,6 +330,10 @@ final class SessionManager: ObservableObject {
     /// the distinction people expect and the reason it is not called "hide".
     func applyPresence() {
         let prefs = PreferencesStore.shared.current
+        // Ghost mode erases the stored position server-side rather than only
+        // stopping new writes — otherwise your last known location sits there
+        // indefinitely, which is the opposite of what was asked for.
+        Task { try? await backend.setGhostMode(deviceID: deviceID, ghost: prefs.ghostMode) }
         if prefs.ghostMode {
             proximity.stopAdvertising()
         } else if let squad, let me = UUID(uuidString: room.localParticipant.identity?.stringValue ?? "") {
@@ -475,6 +522,15 @@ extension SessionManager: RoomDelegate {
         Task { @MainActor in
             guard let id = UUID(uuidString: participant.identity?.stringValue ?? "") else { return }
             let name = participant.name?.isEmpty == false ? participant.name! : "Squad member"
+            // A block has to survive a new session, or blocking somebody just
+            // means they rejoin under a fresh code and you are back where you
+            // started.
+            if blockedIDs.contains(id.uuidString) {
+                for publication in participant.audioTracks {
+                    (publication.track as? RemoteAudioTrack)?.volume = 0
+                }
+                return
+            }
             if !members.contains(where: { $0.id == id }) {
                 members.append(Member(id: id, displayName: name))
             }
