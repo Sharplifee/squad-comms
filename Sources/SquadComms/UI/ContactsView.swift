@@ -9,6 +9,15 @@ import Contacts
 struct ContactsView: View {
     @EnvironmentObject private var session: SessionManager
     @StateObject private var matcher: ContactMatcher
+    @State private var query = ""
+
+    private var filtered: [ContactMatcher.Match] {
+        guard !query.isEmpty else { return matcher.matches }
+        return matcher.matches.filter {
+            $0.contactName.localizedCaseInsensitiveContains(query)
+            || $0.appName.localizedCaseInsensitiveContains(query)
+        }
+    }
 
     init(backend: Backend) {
         _matcher = StateObject(wrappedValue: ContactMatcher(backend: backend))
@@ -29,6 +38,9 @@ struct ContactsView: View {
                 }
             }
             .navigationTitle("Contacts")
+            // Worth having even at a handful of matches: this list grows with
+            // your address book, not with your squad.
+            .searchable(text: $query, prompt: "Search contacts")
             .refreshable { await matcher.scan() }
             .task {
                 switch matcher.permission {
@@ -62,8 +74,13 @@ struct ContactsView: View {
             }
         } else {
             Section {
-                ForEach(matcher.matches) { match in
-                    ContactRowView(match: match, code: session.squad?.joinCode)
+                if filtered.isEmpty {
+                    Text("No match for \"\(query)\"")
+                        .foregroundStyle(Theme.textDim)
+                } else {
+                    ForEach(filtered) { match in
+                        ContactRowView(match: match, code: session.squad?.joinCode)
+                    }
                 }
             } header: {
                 Text("^[\(matcher.matches.count) contact](inflect: true) already on")

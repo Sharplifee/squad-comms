@@ -18,6 +18,8 @@ final class SessionManager: ObservableObject {
         /// Enforced on the receiving side because LiveKit publishes one track
         /// to the room — there is no per-listener mute at the source.
         case routing(to: UUID, muted: Bool)
+        /// The line is being closed for everybody, not just the sender.
+        case sessionEnded
     }
 
     @Published private(set) var state: SessionState = .idle
@@ -33,6 +35,9 @@ final class SessionManager: ObservableObject {
     @Published private(set) var selfMuted = false
     /// When the current session began, for the diagnostics readout.
     @Published private(set) var sessionStart: Date?
+    /// Set when somebody else closed the line, so the UI can say so rather
+    /// than looking like a disconnection.
+    @Published var endedByHost = false
 
     /// Our own LiveKit identity, used to tell whether an inbound private line
     /// was addressed to this device.
@@ -100,6 +105,26 @@ final class SessionManager: ObservableObject {
         } catch {
             state = .failed(friendly(error))
         }
+    }
+
+    /// Close the line for everyone in it.
+    ///
+    /// Distinct from leaving. If you started a session for a workout that is
+    /// over, walking out and leaving three people connected to an empty room
+    /// is not what you meant — but neither is kicking everyone every time you
+    /// personally need to go. The two are separate actions because they are
+    /// separate intentions.
+    func endForEveryone() async {
+        broadcast(.sessionEnded)
+        // Give the message a moment to actually leave before tearing down the
+        // room it travels over.
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        await leave()
+    }
+
+    private func handleSessionEnded() async {
+        endedByHost = true
+        await leave()
     }
 
     func leave() async {
@@ -380,6 +405,7 @@ final class SessionManager: ObservableObject {
         // drop, so a lost message would leave somebody muted or unmuted
         // against their intent with no way to notice.
         case .routing:                               mustArrive = true
+        case .sessionEnded:                          mustArrive = true
         case .speechStart, .speechEnd:               mustArrive = false
         }
         Task {
@@ -442,6 +468,9 @@ extension SessionManager: RoomDelegate {
                     members[index].isMutedByMe = muted
                     applyRemoteVolumes()
                 }
+                return
+            case .sessionEnded:
+                Task { await handleSessionEnded() }
                 return
             case .speechStart, .speechEnd:
                 break

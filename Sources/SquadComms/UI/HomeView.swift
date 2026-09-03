@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var showJoin = false
     @State private var copied = false
     @State private var showStart = false
+    @State private var showEndOptions = false
     @State private var prefs = PreferencesStore.shared.current
 
     var body: some View {
@@ -51,7 +52,15 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Leave", role: .destructive) { Task { await session.leave() } }
+                    HStack(spacing: 5) {
+                        Image(systemName: audio.audioSession.usingHeadphones
+                              ? "airpodspro" : "speaker.wave.2.fill")
+                            .font(.caption)
+                        Text(audio.audioSession.routeName)
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(audio.audioSession.usingHeadphones ? Theme.textDim : Theme.warning)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape") }
@@ -60,6 +69,24 @@ struct HomeView: View {
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showJoin) { SwitchSquadSheet() }
             .sheet(isPresented: $showStart) { StartLineSheet() }
+            // Leaving and closing the line are different intentions, so they
+            // are different buttons rather than one ambiguous End.
+            .confirmationDialog("End this session?", isPresented: $showEndOptions, titleVisibility: .visible) {
+                Button("End for everyone", role: .destructive) {
+                    Task { await session.endForEveryone() }
+                }
+                Button("Just leave") {
+                    Task { await session.leave() }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("You can step out on your own, or close the line for everyone on it.")
+            }
+            .alert("The line was closed", isPresented: $session.endedByHost) {
+                Button("OK") { }
+            } message: {
+                Text("Whoever started it ended the session for everyone.")
+            }
         }
         // Listening holds the microphone and takes the audio session live, so
         // it must not start merely because the app is open — that is what made
@@ -249,7 +276,7 @@ struct HomeView: View {
             .buttonStyle(.plain)
 
             Button {
-                Task { await session.leave() }
+                showEndOptions = true
             } label: {
                 controlButton("End", "phone.down.fill", tint: Theme.muted)
             }
