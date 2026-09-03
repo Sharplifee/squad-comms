@@ -43,6 +43,10 @@ enum Theme {
     static let warning = signal
     static let muted   = danger
 
+    /// Aliases used by screens written against the v2 token names.
+    static let dim          = textFaint
+    static let avatarCorner: CGFloat = 13
+
     static let corner: CGFloat = 18
 
     // MARK: - Radar bands

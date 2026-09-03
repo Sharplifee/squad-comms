@@ -60,7 +60,11 @@ struct FailureView: View {
                     }
                 }
             }
-            .buttonStyle(PrimaryButton())
+            .font(.system(size: 15, weight: .semibold, design: .rounded))
+            .padding(.vertical, 14)
+            .frame(maxWidth: 220)
+            .background(Theme.text, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(Theme.base)
             .frame(maxWidth: 220)
         }
         .padding(32)
