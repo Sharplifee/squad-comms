@@ -67,6 +67,14 @@ final class SessionManager: ObservableObject {
     /// Blocked device ids, applied on join so a blocked person cannot reach
     /// you by starting a fresh session.
     @Published private(set) var blockedIDs: Set<String> = []
+    /// Visible reconnecting state — the brief asks for it explicitly, because
+    /// silence that might be a drop and silence that might be nobody talking
+    /// look identical.
+    @Published private(set) var isReconnecting = false
+    private var reconnectAttempt = 0
+    /// Distinguishes a deliberate exit from a drop, so leaving does not
+    /// trigger a reconnect loop.
+    private var isLeaving = false
     /// Set when this device opened the current line. Closing it for everybody
     /// is the only thing a creator can do that a participant cannot — there is
     /// no muting, kicking or approving, so there is nothing to hand off if the
@@ -643,6 +651,64 @@ final class SessionManager: ObservableObject {
 // MARK: - LiveKit
 
 extension SessionManager: RoomDelegate {
+
+    /// The room dropping was previously unobserved.
+    ///
+    /// Nothing watched the connection state, so a mid-session disconnect left
+    /// the app looking perfectly connected while carrying no audio at all —
+    /// the worst possible failure for this app, because you carry on talking
+    /// to nobody and only find out when they mention it later.
+    nonisolated func room(_ room: Room, didUpdateConnectionState state: ConnectionState,
+                          from oldState: ConnectionState) {
+        Task { @MainActor in
+            switch state {
+            case .connected:
+                reconnectAttempt = 0
+                isReconnecting = false
+                if case .failed = self.state { self.state = .connected }
+
+            case .reconnecting:
+                // LiveKit is handling it. Say so rather than looking fine.
+                isReconnecting = true
+
+            case .disconnected:
+                // LiveKit gave up. If we still believe we are in a squad, this
+                // is a drop rather than us leaving, so climb back in.
+                guard squad != nil, !isLeaving else { return }
+                isReconnecting = true
+                await retryConnect()
+
+            default:
+                break
+            }
+        }
+    }
+
+    /// Exponential backoff with a ceiling.
+    ///
+    /// A fixed retry hammers a server that is already struggling; an unbounded
+    /// one eventually waits so long the person has given up anyway. Doubling
+    /// to a 30 second cap keeps trying for as long as the app is open without
+    /// making things worse.
+    private func retryConnect() async {
+        guard let squad else { return }
+        let delay = min(pow(2.0, Double(reconnectAttempt)), 30)
+        reconnectAttempt += 1
+
+        Log.session.info("reconnect attempt \(self.reconnectAttempt, privacy: .public) in \(delay, privacy: .public)s")
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+
+        guard self.squad != nil, !isLeaving else { return }
+        do {
+            try await connect(to: squad)
+            isReconnecting = false
+            reconnectAttempt = 0
+        } catch {
+            // Keep going. The line is worth more than a tidy failure state,
+            // and the person can always leave.
+            await retryConnect()
+        }
+    }
 
     nonisolated func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
         Task { @MainActor in

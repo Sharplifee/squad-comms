@@ -315,6 +315,7 @@ struct LineView: View {
     }
 
     private var headline: String {
+        if session.isReconnecting { return "Reconnecting" }
         if audio.isTransmitting { return "You're on" }
         let talking = session.members.filter { $0.isSpeaking && !$0.isMutedByMe }
         if talking.count == 1 { return "\(talking[0].displayName) is talking" }
