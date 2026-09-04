@@ -83,6 +83,11 @@ targets:
     deploymentTarget: "10.0"
     sources:
       - Sources/SquadCommsWatch
+      # A watchOS bundle is validated for an icon on its own — the phone
+      # app's catalog does not cover it — so without this the archive builds
+      # and signs cleanly and then altool rejects the package 90713.
+      - path: Sources/SquadCommsWatch/Assets.xcassets
+        type: folder
     info:
       path: Sources/SquadCommsWatch/Info.plist
       properties:
@@ -91,9 +96,11 @@ targets:
         CFBundleVersion: "20"
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.connor.openline
+        CFBundleIconName: AppIcon
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.connor.openline.watchkitapp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         DEVELOPMENT_TEAM: XF783932R2
         PROVISIONING_PROFILE_SPECIFIER: SquadComms Watch CI
         CODE_SIGN_STYLE: Manual
