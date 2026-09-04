@@ -34,7 +34,7 @@ targets:
       properties:
         CFBundleDisplayName: squad comms
         CFBundleShortVersionString: "1.3"
-        CFBundleVersion: "3"
+        CFBundleVersion: "19"
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: squad comms uses your microphone so your squad hears you without touching your phone.
@@ -88,7 +88,7 @@ targets:
       properties:
         CFBundleDisplayName: squad comms
         CFBundleShortVersionString: "1.3"
-        CFBundleVersion: "3"
+        CFBundleVersion: "19"
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.connor.openline
     settings:
@@ -116,7 +116,7 @@ targets:
       properties:
         CFBundleDisplayName: squad comms
         CFBundleShortVersionString: "1.3"
-        CFBundleVersion: "3"
+        CFBundleVersion: "19"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:

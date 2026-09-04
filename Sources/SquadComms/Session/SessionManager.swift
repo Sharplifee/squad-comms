@@ -839,10 +839,18 @@ extension SessionManager: RoomDelegate {
             // would expire on their schedule rather than the group's. The
             // longest-present member takes it over so the line survives the
             // person who opened it walking out.
+            if let squad {
+                // Anybody still here claims the expiry. Idempotent server-side,
+                // so it does not matter that several clients may do this at
+                // the same moment when the creator drops.
+                Task { try? await backend.extendSquad(id: squad.id, deviceID: deviceID) }
+            }
+
             if members.isEmpty {
                 // Last one out. Keep the line alive rather than closing it —
-                // somebody stepping outside for two minutes should not end
-                // the session for the person still lifting.
+                // somebody stepping outside for two minutes should not end the
+                // session for the person still lifting. The idle sweep closes
+                // it an hour later if nobody comes back.
                 Log.session.info("last remote left; line held open")
             }
 
