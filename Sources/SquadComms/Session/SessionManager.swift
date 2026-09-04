@@ -229,6 +229,14 @@ final class SessionManager: ObservableObject {
         SavedSquadStore.shared.remember(code: squad.joinCode, name: squad.name,
                                         members: members.map(\.displayName))
         startHeartbeat()
+        LineActivityController.shared.start(squadName: squad.name,
+                                            code: squad.joinCode,
+                                            memberCount: members.count)
+        // The lock-screen button runs in this process, so it can just call us.
+        MuteBridge.shared.toggle = { [weak self] in
+            guard let self else { return }
+            self.setSelfMuted(!self.selfMuted)
+        }
         Task { _ = try? await backend.claimHost(squadID: squad.id, deviceID: deviceID) }
         Telemetry.event("session_connected", ["squad": squad.id.uuidString])
     }
@@ -241,6 +249,8 @@ final class SessionManager: ObservableObject {
         proximity.stop()
         envelopeTimer?.cancel(); envelopeTimer = nil
         heartbeat?.invalidate(); heartbeat = nil
+        MuteBridge.shared.toggle = nil
+        LineActivityController.shared.end()
         envelopes.removeAll()
         members.removeAll()
         speakingRemotes.removeAll()
@@ -334,6 +344,17 @@ final class SessionManager: ObservableObject {
         }
     }
 
+    /// Keep the lock screen honest about who is talking.
+    private func refreshActivity() {
+        guard let start = sessionStart else { return }
+        LineActivityController.shared.update(
+            speaker: members.first(where: { $0.isSpeaking && !$0.isMutedByMe })?.displayName,
+            selfMuted: selfMuted,
+            memberCount: members.count,
+            startedAt: start
+        )
+    }
+
     func setMicrophone(enabled: Bool) {
         guard !selfMuted else { return }
         Task { try? await room.localParticipant.setMicrophone(enabled: enabled) }
@@ -342,6 +363,7 @@ final class SessionManager: ObservableObject {
     func setSelfMuted(_ muted: Bool) {
         selfMuted = muted
         if muted { Task { try? await room.localParticipant.setMicrophone(enabled: false) } }
+        refreshActivity()
     }
 
     /// Re-apply preference-driven audio values after the Audio tab changes
@@ -615,6 +637,7 @@ extension SessionManager: RoomDelegate {
                 // Speech state is what opens and closes the envelope, so the
                 // ramp has to be re-driven the moment it changes.
                 applyRemoteVolumes()
+                refreshActivity()
             }
 
             let wasQuiet = speakingRemotes.isEmpty

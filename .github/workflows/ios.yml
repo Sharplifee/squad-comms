@@ -68,9 +68,14 @@ jobs:
       - name: Install provisioning profile
         env:
           APPLE_PROVISION_PROFILE: ${{ secrets.APPLE_PROVISION_PROFILE }}
+          APPLE_WIDGET_PROFILE: ${{ secrets.APPLE_WIDGET_PROFILE }}
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$APPLE_PROVISION_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/squadcomms.mobileprovision
+          # The widget extension has its own bundle id and therefore its own
+          # profile. Without it the archive fails at the embed step rather than
+          # at app signing, which is a confusing place to discover it.
+          echo "$APPLE_WIDGET_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/widgets.mobileprovision
 
       - name: Generate project and write build configuration
         env:
@@ -131,6 +136,7 @@ jobs:
             <key>provisioningProfiles</key>
             <dict>
               <key>com.connor.openline</key><string>SquadComms CI 6</string>
+              <key>com.connor.openline.widgets</key><string>SquadComms Widgets CI</string>
             </dict>
           </dict>
           </plist>
