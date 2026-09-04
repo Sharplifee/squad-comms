@@ -302,7 +302,7 @@ struct LineView: View {
     /// mic button only toggled mute, and push-to-talk had no control anywhere.
     @ViewBuilder
     private var micControl: some View {
-        if prefs.openMic { openMicButton } else { pushToTalkButton }
+        if PreferencesStore.shared.current.openMic { openMicButton } else { pushToTalkButton }
     }
 
     private var pushToTalkButton: some View {
