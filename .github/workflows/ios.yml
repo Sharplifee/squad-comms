@@ -39,6 +39,11 @@ jobs:
       - name: Audit for dead settings
         run: python3 scripts/audit_dead_controls.py
 
+      # RPC parameter names fail at runtime with nothing failing at compile
+      # time, so they have to be checked structurally too.
+      - name: Audit RPC signatures
+        run: python3 scripts/audit_rpc_params.py
+
       - name: Generate Xcode project
         run: xcodegen generate
 
