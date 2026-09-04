@@ -143,6 +143,9 @@ jobs:
             <dict>
               <key>com.connor.openline</key><string>SquadComms CI 6</string>
               <key>com.connor.openline.widgets</key><string>SquadComms Widgets CI</string>
+              <!-- Every embedded bundle needs naming here, not just the app.
+                   Export fails on the first one it cannot map. -->
+              <key>com.connor.openline.watchkitapp</key><string>SquadComms Watch CI</string>
             </dict>
           </dict>
           </plist>
