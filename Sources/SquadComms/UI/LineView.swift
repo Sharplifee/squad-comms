@@ -12,6 +12,9 @@ struct LineView: View {
     @EnvironmentObject private var audio: AudioCoordinator
     @EnvironmentObject private var toasts: ToastCenter
     @StateObject private var saved = SavedSquadStore.shared
+    /// Watched rather than polled, so the banner appears the moment the
+    /// network drops instead of when something fails.
+    @StateObject private var reachability = ReachabilityWatcher()
 
     @State private var showStart = false
     @State private var showJoin = false
