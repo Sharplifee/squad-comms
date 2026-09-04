@@ -13,21 +13,6 @@
     <key>NSPrivacyCollectedDataTypes</key>
     <array>
         <dict>
-            <!-- The radar needs to know how far away somebody is, which cannot
-                 be answered without a position. Not linked to an identity and
-                 never used for tracking. -->
-            <key>NSPrivacyCollectedDataType</key>
-            <string>NSPrivacyCollectedDataTypePreciseLocation</string>
-            <key>NSPrivacyCollectedDataTypeLinked</key>
-            <false/>
-            <key>NSPrivacyCollectedDataTypeTracking</key>
-            <false/>
-            <key>NSPrivacyCollectedDataTypePurposes</key>
-            <array>
-                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-            </array>
-        </dict>
-        <dict>
             <!-- Contacts are hashed on the device; only hashes are sent. It is
                  still declared, because the comparison is the collection. -->
             <key>NSPrivacyCollectedDataType</key>

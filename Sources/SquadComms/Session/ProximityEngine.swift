@@ -28,17 +28,29 @@ final class ProximityEngine: NSObject, ObservableObject {
 
     /// Nine logarithmic stops. Hyper-local matters most — 100 ft is the gym
     /// floor, and that is the case this app exists for.
-    static let rangeLabels  = ["100 FT", "250 FT", "500 FT", "0.25 MI", "1 MI",
-                               "5 MI", "25 MI", "100 MI", "ANYWHERE"]
+    /// Four stops, all of them reachable.
+    ///
+    /// There were nine, running to 100 miles and ANYWHERE. Proximity here is
+    /// Bluetooth LE, which is spent by about 100 metres in open air and much
+    /// sooner through a gym full of bodies and steel — so six of those stops
+    /// described distances the radio physically cannot see. Selecting them did
+    /// nothing except widen a filter that was never the limiting factor, while
+    /// implying the app could find somebody across a city.
+    static let rangeLabels  = ["30 FT", "100 FT", "250 FT", "MAX"]
     /// Short forms for the tick row under the slider.
-    static let rangeTicks = ["100ft", "250ft", "500ft", ".25mi", "1mi",
-                             "5mi", "25mi", "100mi", "∞"]
+    static let rangeTicks = ["30ft", "100ft", "250ft", "max"]
 
-    static let rangeMetres: [Double] = [30.5, 76.2, 152.4, 402.3, 1609.3,
-                                        8046.7, 40233.6, 160934.4, 9_999_999]
+    static let rangeMetres: [Double] = [9.1, 30.5, 76.2, 150]
 
+    /// Clamped on write. Anyone upgrading from the nine-stop scale may have a
+    /// stored index of up to 8, which would index straight past the end of a
+    /// four-element array and trap on launch.
     @Published var rangeIndex: Int = 1 {
-        didSet { renormalise() }
+        didSet {
+            let safe = min(max(rangeIndex, 0), Self.rangeMetres.count - 1)
+            if safe != rangeIndex { rangeIndex = safe; return }
+            renormalise()
+        }
     }
 
     var onNearbyChanged: ((Set<UUID>) -> Void)?

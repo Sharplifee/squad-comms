@@ -154,23 +154,15 @@ struct LineView: View {
             .padding(.top, 16)
             .padding(.bottom, 6)
 
-            Group {
-                // Past 100 miles concentric rings say nothing, because
-                // everybody pins to the outer edge. A map does say something.
-                if session.proximity.rangeIndex >= 7 {
-                    ContinentalView(members: session.members)
-                } else {
-                    PlateRadarView(
-                        contacts: session.proximity.contacts,
-                        rangeIndex: session.proximity.rangeIndex,
-                        names: Dictionary(uniqueKeysWithValues:
-                            session.members.map { ($0.id, $0.displayName) }),
-                        speakingID: session.members.first(where: { $0.isSpeaking })?.id,
-                        isScanning: session.proximity.isScanning
-                    )
-                    .frame(height: 126)
-                }
-            }
+            PlateRadarView(
+                contacts: session.proximity.contacts,
+                rangeIndex: session.proximity.rangeIndex,
+                names: Dictionary(uniqueKeysWithValues:
+                    session.members.map { ($0.id, $0.displayName) }),
+                speakingID: session.members.first(where: { $0.isSpeaking })?.id,
+                isScanning: session.proximity.isScanning
+            )
+            .frame(height: 126)
             .padding(.horizontal, 16)
 
             Divider().overlay(Theme.line).padding(.top, 6)
