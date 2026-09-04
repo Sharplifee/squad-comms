@@ -110,6 +110,12 @@ jobs:
           done
           echo "CFBundleVersion = $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")"
 
+      # Runs before the archive so a dead control fails in seconds rather
+      # than after a full build, an upload, and somebody finding a slider that
+      # does nothing.
+      - name: Audit for dead controls
+        run: python3 scripts/audit_dead_controls.py
+
       - name: Archive
         run: |
           xcodebuild -project SquadComms.xcodeproj \
