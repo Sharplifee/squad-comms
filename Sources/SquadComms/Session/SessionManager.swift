@@ -366,12 +366,6 @@ final class SessionManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "squadcomms.onboarded")
     }
 
-    /// Blocks load before anything connects, so a blocked person is silent
-    /// from the first packet rather than after a round trip.
-    func loadBlocks() async {
-        blockedIDs = Set((try? await backend.blockedList(blocker: deviceID))?.map(\.deviceID) ?? [])
-    }
-
     // MARK: - Controls
 
     /// Step out on your own. The line stays open for everyone else.
