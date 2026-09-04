@@ -826,12 +826,6 @@ extension SessionManager: RoomDelegate {
                 Log.session.info("last remote left; line held open")
             }
 
-            // Whoever is still here takes the row over, so it stops pointing
-            // at a creator who has gone. Claims only a genuine orphan, so the
-            // common case where the creator is still present is a no-op.
-            if let squad {
-                Task { try? await backend.claimSquad(id: squad.id, deviceID: deviceID) }
-            }
         }
     }
 
