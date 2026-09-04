@@ -172,6 +172,9 @@ struct SettingsHome: View {
     }
 
     private var safetySection: some View {
+        // Two sections from one property needs a Group — without it the
+        // opaque return type has nothing to infer from.
+        Group {
             Section {
                 NavigationLink { ContactsView(backend: session.backend) } label: {
                     Label("Find your contacts", systemImage: "person.crop.circle.badge.plus")
@@ -182,15 +185,16 @@ struct SettingsHome: View {
                 Text("See which of your contacts already have the app. Numbers are scrambled on your phone before anything is sent.")
             }
 
-        Section {
-            NavigationLink { BlockedListView() } label: {
-                Label("Blocked", systemImage: "hand.raised")
+            Section {
+                NavigationLink { BlockedListView() } label: {
+                    Label("Blocked", systemImage: "hand.raised")
+                }
+                NavigationLink { DeleteDataView() } label: {
+                    Label("Your data", systemImage: "trash")
+                }
+            } header: {
+                Text("Safety and privacy")
             }
-            NavigationLink { DeleteDataView() } label: {
-                Label("Your data", systemImage: "trash")
-            }
-        } header: {
-            Text("Safety and privacy")
         }
     }
 
