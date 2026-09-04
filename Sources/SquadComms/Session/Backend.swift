@@ -65,9 +65,12 @@ struct Backend {
     /// abandoned rooms.
     func joinSquad(code: String, deviceID: String) async throws -> SquadOutcome {
         guard let client else { throw BackendError.notConfigured }
-        struct P: Encodable { let p_code: String; let p_device_id: String }
+        struct P: Encodable {
+            let p_code: String; let p_device_id: String; let p_display_name: String
+        }
         let rows: [SquadOutcome] = try await client
-            .rpc("join_squad", params: P(p_code: code, p_device_id: deviceID))
+            .rpc("join_squad", params: P(p_code: code, p_device_id: deviceID,
+                                        p_display_name: PreferencesStore.shared.current.displayName))
             .execute().value
         guard let first = rows.first else { throw BackendError.codeNotFound }
         return first
@@ -76,12 +79,37 @@ struct Backend {
     /// Open a new line on a chosen code. Refuses a code already live.
     func createSquad(code: String, name: String, deviceID: String) async throws -> SquadOutcome {
         guard let client else { throw BackendError.notConfigured }
-        struct P: Encodable { let p_code: String; let p_name: String; let p_device_id: String }
+        struct P: Encodable {
+            let p_code: String; let p_name: String
+            let p_device_id: String; let p_display_name: String
+        }
         let rows: [SquadOutcome] = try await client
-            .rpc("create_squad", params: P(p_code: code, p_name: name, p_device_id: deviceID))
+            .rpc("create_squad", params: P(p_code: code, p_name: name, p_device_id: deviceID,
+                                          p_display_name: PreferencesStore.shared.current.displayName))
             .execute().value
         guard let first = rows.first else { throw BackendError.notConfigured }
         return first
+    }
+
+    /// Tell the server we are still here.
+    ///
+    /// Without a heartbeat a force-quit leaves somebody occupying a seat
+    /// forever, and a cap that counts ghosts starts locking out the very
+    /// people it was meant to protect.
+    func heartbeat(squadID: UUID, deviceID: String) async {
+        guard let client else { return }
+        struct P: Encodable { let p_squad_id: String; let p_device_id: String }
+        _ = try? await client.rpc("heartbeat",
+            params: P(p_squad_id: squadID.uuidString, p_device_id: deviceID)).execute()
+    }
+
+    /// Step out. The last person out closes the line, so its code is released
+    /// immediately rather than reserved for twelve hours after everyone left.
+    func leaveSquad(squadID: UUID, deviceID: String) async {
+        guard let client else { return }
+        struct P: Encodable { let p_squad_id: String; let p_device_id: String }
+        _ = try? await client.rpc("leave_squad",
+            params: P(p_squad_id: squadID.uuidString, p_device_id: deviceID)).execute()
     }
 
     /// Close a line for everyone and free its code for reuse.

@@ -67,6 +67,7 @@ final class SessionManager: ObservableObject {
     /// Blocked device ids, applied on join so a blocked person cannot reach
     /// you by starting a fresh session.
     @Published private(set) var blockedIDs: Set<String> = []
+    private var heartbeatTask: Task<Void, Never>?
 
     /// Our own LiveKit identity, used to tell whether an inbound private line
     /// was addressed to this device.
@@ -314,112 +315,6 @@ final class SessionManager: ObservableObject {
     // MARK: - Controls
 
     /// Step out on your own. The line stays open for everyone else.
-    func leave() async {
-        await room.disconnect()
-        proximity.stop()
-        envelopeTimer?.cancel(); envelopeTimer = nil
-        heartbeat?.invalidate(); heartbeat = nil
-        MuteBridge.shared.toggle = nil
-        LineActivityController.shared.end()
-        // Without this the system keeps ducking whatever is playing after we
-        // have gone — the music never comes back to full and there is nothing
-        // left on screen to explain why.
-        onLeave?()
-        envelopes.removeAll()
-        members.removeAll()
-        speakingRemotes.removeAll()
-        squad = nil
-        sessionStart = nil
-        privateLineTo = nil
-        privateLineFrom = nil
-        state = .idle
-    }
-
-    /// Close the line for everyone in it.
-    ///
-    /// Distinct from leaving. Walking out of a finished workout and leaving
-    /// people connected to an empty room is not what you meant, but neither is
-    /// kicking everybody every time you personally need to go.
-    func endForEveryone() async {
-        broadcast(.sessionEnded)
-        // Let the message leave before tearing down the room it travels over.
-        try? await Task.sleep(nanoseconds: 250_000_000)
-        if let id = squad?.id { try? await backend.endSquad(id: id) }
-        await leave()
-    }
-
-    private func handleSessionEnded() async {
-        endedByHost = true
-        await leave()
-    }
-
-    func reset() { state = .idle }
-
-    /// Rejoin the same line after a drop LiveKit cannot recover from — an
-    /// expired token or a room closed server-side both look identical from
-    /// here and leave you connected to nothing.
-    func reconnectIfNeeded() async {
-        guard let squad else { return }
-        await room.disconnect()
-        state = .connecting
-        do {
-            try await connect(to: squad)
-        } catch {
-            // A failed reconnect leaves the line closed, not the app broken.
-            notice = friendly(error)
-            state = .idle
-        }
-    }
-
-    // MARK: - Safety
-
-    func report(member: Member, reason: String, detail: String?) async {
-        try? await backend.report(reporter: deviceID, reported: member.id.uuidString,
-                                  squadID: squad?.id, reason: reason, detail: detail)
-        // Take effect immediately rather than waiting for a round trip — the
-        // person is still audible while the request is in flight.
-        setMuted(true, for: member)
-        blockedIDs.insert(member.id.uuidString)
-    }
-
-    func block(member: Member) async {
-        try? await backend.block(blocker: deviceID, blocked: member.id.uuidString)
-        setMuted(true, for: member)
-        blockedIDs.insert(member.id.uuidString)
-    }
-
-    func unblock(deviceID target: String) async {
-        try? await backend.unblock(blocker: deviceID, blocked: target)
-        blockedIDs.remove(target)
-    }
-
-    func blockedList() async -> [Backend.BlockedRow] {
-        (try? await backend.blockedList(blocker: deviceID)) ?? []
-    }
-
-    func deleteMyData() async {
-        try? await backend.deleteMyData(deviceID: deviceID)
-        await leave()
-        UserDefaults.standard.removeObject(forKey: "squadcomms.lastCode")
-        UserDefaults.standard.removeObject(forKey: "squadcomms.onboarded")
-    }
-
-    /// Keep the line alive and make sure somebody owns it.
-    ///
-    /// Runs while connected. Two problems it solves: a code expiring under
-    /// people who are still talking, and a session whose host has walked out
-    /// leaving nothing to hold it open.
-    private func startHeartbeat() {
-        heartbeat?.invalidate()
-        heartbeat = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, let squad = self.squad else { return }
-                try? await self.backend.touch(squadID: squad.id)
-                _ = try? await self.backend.claimHost(squadID: squad.id, deviceID: self.deviceID)
-            }
-        }
-    }
-
     /// Keep the lock screen honest about who is talking.
     private func refreshActivity() {
         guard let start = sessionStart else { return }
