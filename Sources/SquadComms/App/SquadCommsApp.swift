@@ -20,6 +20,11 @@ struct SquadCommsApp: App {
                     await session.restoreLastSession()
                 }
                 .onChange(of: scenePhase) { _, phase in
+                    // A permission can be taken away in Settings while we are
+                    // backgrounded. iOS never tells us — it just stops
+                    // delivering audio — so returning to the foreground is the
+                    // only moment we can notice.
+                    if phase == .active { audio.recheckPermissions() }
                     // The radar updates a picture nobody can see while
                     // backgrounded, and BLE scanning is not free.
                     session.proximity.setSuspended(phase != .active)

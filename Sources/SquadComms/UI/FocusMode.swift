@@ -50,11 +50,11 @@ struct FocusOverlay: View {
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "moon.fill")
-                .font(.system(size: 44))
+                .font(.system(.largeTitle))
                 .foregroundStyle(Theme.accent)
 
             Text("\(focus.remaining)")
-                .font(.system(size: 88, weight: .semibold, design: .rounded))
+                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                 .monospacedDigit()
                 .contentTransition(.numericText(countsDown: true))
                 .animation(.snappy, value: focus.remaining)

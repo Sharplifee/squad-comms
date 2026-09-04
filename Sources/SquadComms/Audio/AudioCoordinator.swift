@@ -9,6 +9,10 @@ final class AudioCoordinator: ObservableObject {
     @Published private(set) var isTransmitting = false
     @Published private(set) var inputLevelDB: Float = -60
     @Published private(set) var micPermissionGranted = false
+    /// Revoked in Settings while the app was running. Distinct from never
+    /// having been granted, because the app was working a moment ago and the
+    /// person needs to know why it stopped.
+    @Published private(set) var micRevoked = false
 
     /// Set when the squad asks "who's on". The UI reads it and clears it.
     @Published var rosterAnnouncement: String?
@@ -102,6 +106,22 @@ final class AudioCoordinator: ObservableObject {
     /// Live foldback level from the Audio tab; no restart required.
     func setSelfMonitorLevel(_ level: Double) {
         selfMonitor.level = Float(level)
+    }
+
+    /// iOS does not notify an app when a permission is taken away — it simply
+    /// stops delivering audio. Re-checking on foreground is the only way to
+    /// notice, and without it the app looks broken rather than blocked.
+    func recheckPermissions() {
+        let status = AVAudioApplication.shared.recordPermission
+        let granted = (status == .granted)
+        if micPermissionGranted && !granted {
+            micRevoked = true
+            vad.stop()
+            Log.audio.error("microphone permission REVOKED while running — transmission stopped")
+        } else if granted {
+            micRevoked = false
+        }
+        micPermissionGranted = granted
     }
 
     func startListening() async {

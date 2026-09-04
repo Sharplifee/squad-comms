@@ -74,12 +74,12 @@ struct Ribbon: View {
     private func chip(name: String, speaking: Bool, isSelf: Bool) -> some View {
         HStack(spacing: 8) {
             Text(initials(name))
-                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                .font(.system(.caption2, design: .rounded, weight: .semibold))
                 .foregroundStyle(speaking ? Theme.base : Theme.textDim)
                 .frame(width: 25, height: 25)
                 .background(speaking ? Theme.signal : Theme.raised, in: Circle())
             Text(isSelf ? "You" : name)
-                .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                .font(.system(.caption, design: .rounded, weight: .medium))
                 .foregroundStyle(Theme.text)
         }
         .padding(.leading, 6)

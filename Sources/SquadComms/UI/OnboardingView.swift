@@ -63,14 +63,14 @@ struct OnboardingView: View {
             Spacer()
 
             Image(systemName: slides[step].symbol)
-                .font(.system(size: 44))
+                .font(.system(.largeTitle))
                 .foregroundStyle(Theme.accent)
                 .frame(width: 74, height: 74)
                 .background(Theme.accent.opacity(0.12),
                             in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
             Text(slides[step].title)
-                .font(.system(size: 32, weight: .semibold))
+                .font(.system(.largeTitle, weight: .semibold))
                 .padding(.top, 26)
 
             Text(slides[step].body)
@@ -143,14 +143,14 @@ struct OnboardingView: View {
             Spacer()
 
             Image(systemName: "person.fill")
-                .font(.system(size: 38))
+                .font(.system(.largeTitle))
                 .foregroundStyle(Theme.accent)
                 .frame(width: 74, height: 74)
                 .background(Theme.accent.opacity(0.12),
                             in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
             Text("What should they\ncall you?")
-                .font(.system(size: 32, weight: .semibold))
+                .font(.system(.largeTitle, weight: .semibold))
                 .padding(.top, 26)
 
             Text("This is the whole signup. No account, no password, no email.")

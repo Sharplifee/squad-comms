@@ -43,10 +43,10 @@ struct ConditionBanners: View {
             if let notice = session.notice {
                 HStack(alignment: .top, spacing: 11) {
                     Image(systemName: "exclamationmark.circle")
-                        .font(.system(size: 15))
+                        .font(.system(.subheadline))
                         .foregroundStyle(Theme.signal)
                     Text(notice)
-                        .font(.system(size: 12.5, design: .rounded))
+                        .font(.system(.caption, design: .rounded))
                         .foregroundStyle(Theme.text)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -54,7 +54,7 @@ struct ConditionBanners: View {
                         session.notice = nil
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(.caption2, weight: .semibold))
                             .foregroundStyle(Theme.muted)
                     }
                 }
@@ -78,18 +78,18 @@ struct ConditionBanners: View {
                         tint: Color, action: (String, () -> Void)? = nil) -> some View {
         HStack(alignment: .top, spacing: 11) {
             Image(systemName: symbol)
-                .font(.system(size: 15))
+                .font(.system(.subheadline))
                 .foregroundStyle(tint)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
                 Text(detail)
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let action {
                     Button(action.0, action: action.1)
-                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
                         .foregroundStyle(Theme.text)
                         .padding(.top, 4)
                 }

@@ -57,10 +57,10 @@ struct SettingsHome: View {
                                              ? Theme.text : Theme.textFaint)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(behavior.label)
-                                .font(.system(size: 15, design: .rounded))
+                                .font(.system(.subheadline, design: .rounded))
                                 .foregroundStyle(Theme.text)
                             Text(behavior.detail)
-                                .font(.system(size: 12.5, design: .rounded))
+                                .font(.system(.caption, design: .rounded))
                                 .foregroundStyle(Theme.textDim)
                         }
                     }
@@ -79,10 +79,10 @@ struct SettingsHome: View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Sensitivity").font(.system(size: 15, design: .rounded))
+                    Text("Sensitivity").font(.system(.subheadline, design: .rounded))
                     Spacer()
                     Text("\(Int(prefs.vadOnsetDB)) dB · \(sensitivityWord)")
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(.system(.footnote, design: .monospaced))
                         .foregroundStyle(Theme.textDim)
                 }
                 Slider(value: Binding(
@@ -161,9 +161,9 @@ struct SettingsHome: View {
     private var batterySection: some View {
         Section {
             Toggle("Low power mode", isOn: $prefs.lowPowerMode)
-                .font(.system(size: 15, design: .rounded))
+                .font(.system(.subheadline, design: .rounded))
             Toggle("Sound cues", isOn: $prefs.soundCues)
-                .font(.system(size: 15, design: .rounded))
+                .font(.system(.subheadline, design: .rounded))
         } header: {
             Text("Battery and feedback")
         } footer: {
@@ -218,10 +218,10 @@ struct SettingsHome: View {
     private func slider(_ title: String, value: Binding<Double>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(title).font(.system(size: 15, design: .rounded))
+                Text(title).font(.system(.subheadline, design: .rounded))
                 Spacer()
                 Text("\(Int(value.wrappedValue * 100))%")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(Theme.textDim)
             }
             Slider(value: value, in: 0...1).tint(Theme.text)

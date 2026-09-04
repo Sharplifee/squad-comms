@@ -25,6 +25,7 @@ struct LineView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     masthead
+                    banners
                 if !reachability.isOnline { offlineBanner }
                 if session.microphoneRevoked { micRevokedBanner }
                 ConditionBanners()
@@ -55,18 +56,72 @@ struct LineView: View {
         }
     }
 
+    /// Things that stop the app working, said plainly, with the way out.
+    @ViewBuilder
+    private var banners: some View {
+        VStack(spacing: 10) {
+            if audio.micRevoked {
+                banner(icon: "mic.slash.fill",
+                       title: "Microphone turned off",
+                       detail: "Nobody can hear you. Squadstream needs the mic to work at all.",
+                       action: "Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            }
+            if !NetworkReachability.isOnline {
+                banner(icon: "wifi.slash",
+                       title: "No connection",
+                       detail: "You can't open or join a line until you're back online.",
+                       action: nil, handler: nil)
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.bottom, banners_isEmpty ? 0 : 16)
+    }
+
+    private var banners_isEmpty: Bool {
+        !audio.micRevoked && NetworkReachability.isOnline
+    }
+
+    private func banner(icon: String, title: String, detail: String,
+                        action: String?, handler: (() -> Void)?) -> some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: icon).foregroundStyle(Theme.danger)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                Text(detail)
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(Theme.textDim)
+                if let action, let handler {
+                    Button(action, action: handler)
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .padding(.top, 3)
+                }
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(Theme.danger.opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Theme.danger.opacity(0.28)))
+    }
+
     // MARK: - Masthead
 
     private var masthead: some View {
         HStack {
             Text("SQUAD COMMS")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(.footnote, design: .rounded, weight: .semibold))
                 .tracking(1.3)
                 .foregroundStyle(Theme.textFaint)
             Spacer()
             if let started = session.sessionStart {
                 Text(elapsed(since: started))
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(Theme.textDim)
                     .padding(.trailing, 10)
             }
@@ -78,7 +133,7 @@ struct LineView: View {
                     .fill(audio.audioSession.usingHeadphones ? Theme.signal : Theme.danger)
                     .frame(width: 6, height: 6)
                 Text(audio.audioSession.routeName)
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(Theme.textDim)
                     .lineLimit(1)
             }
@@ -95,9 +150,9 @@ struct LineView: View {
             Image(systemName: "wifi.slash").foregroundStyle(Theme.danger)
             VStack(alignment: .leading, spacing: 2) {
                 Text("No connection")
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
                 Text("You can't open or join a line until you're back online.")
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(Theme.muted)
             }
             Spacer()
@@ -120,16 +175,16 @@ struct LineView: View {
                 .foregroundStyle(Theme.danger)
             VStack(alignment: .leading, spacing: 3) {
                 Text("Microphone is off")
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
                 Text("Nobody can hear you. Squadstream needs the mic to work at all.")
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(Theme.muted)
                 Button("Open Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
                     }
                 }
-                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                .font(.system(.caption, design: .rounded, weight: .semibold))
                 .foregroundStyle(Theme.text)
                 .padding(.top, 3)
             }
@@ -149,16 +204,16 @@ struct LineView: View {
     private var closed: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("The line is closed")
-                .font(.system(size: 32, weight: .semibold, design: .rounded))
+                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                 .foregroundStyle(Theme.text)
             Text("Open one and your squad can just talk. Your music keeps playing.")
-                .font(.system(size: 14, design: .rounded))
+                .font(.system(.footnote, design: .rounded))
                 .foregroundStyle(Theme.textDim)
                 .padding(.top, 9)
 
             Button { showStart = true } label: {
                 Text("Open the line")
-                    .font(.system(size: 16.5, weight: .semibold, design: .rounded))
+                    .font(.system(.callout, design: .rounded, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 19)
             }
@@ -167,7 +222,7 @@ struct LineView: View {
             .padding(.top, 20)
 
             Button("Have a code? Join instead") { showJoin = true }
-                .font(.system(size: 13.5, weight: .medium, design: .rounded))
+                .font(.system(.footnote, design: .rounded, weight: .medium))
                 .foregroundStyle(Theme.textDim)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 14)
@@ -187,7 +242,7 @@ struct LineView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Nearby")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 Spacer()
                 RangeLoaderView(index: Binding(
                     get: { session.proximity.rangeIndex },
@@ -214,7 +269,7 @@ struct LineView: View {
                 Text(session.proximity.isScanning
                      ? "Nobody nearby with the app."
                      : "Bluetooth is off, so nobody can be seen nearby.")
-                    .font(.system(size: 13.5, design: .rounded))
+                    .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(Theme.textDim)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(18)
@@ -223,10 +278,10 @@ struct LineView: View {
                     HStack(spacing: 13) {
                         Circle().fill(Theme.raised).frame(width: 40, height: 40)
                         Text("Someone nearby")
-                            .font(.system(size: 15, design: .rounded))
+                            .font(.system(.subheadline, design: .rounded))
                         Spacer()
                         Text(distance(contact.metres))
-                            .font(.system(size: 12.5, design: .monospaced))
+                            .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(Theme.textDim)
                     }
                     .padding(.horizontal, 18)
@@ -249,17 +304,17 @@ struct LineView: View {
                 } label: {
                     HStack(spacing: 13) {
                         Text(squad.code)
-                            .font(.system(size: 13.5, weight: .semibold, design: .monospaced))
+                            .font(.system(.footnote, design: .monospaced, weight: .semibold))
                             .foregroundStyle(Theme.textDim)
                             .frame(width: 52, height: 40)
                             .background(Theme.raised,
                                         in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(squad.name)
-                                .font(.system(size: 15, weight: .medium, design: .rounded))
+                                .font(.system(.subheadline, design: .rounded, weight: .medium))
                                 .foregroundStyle(Theme.text)
                             Text(squad.subtitle)
-                                .font(.system(size: 12.5, design: .rounded))
+                                .font(.system(.caption, design: .rounded))
                                 .foregroundStyle(Theme.textDim)
                                 .lineLimit(1)
                         }
@@ -283,9 +338,9 @@ struct LineView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text("You trigger the line at \(Int(PreferencesStore.shared.current.vadOnsetDB)) dB")
-                    .font(.system(size: 13.5, weight: .medium, design: .rounded))
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
                 Text("Tap to change how loud you need to be")
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(.caption, design: .rounded))
                     .foregroundStyle(Theme.textDim)
             }
             Spacer()
@@ -301,7 +356,7 @@ struct LineView: View {
     private var open: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(headline)
-                .font(.system(size: 32, weight: .semibold, design: .rounded))
+                .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                 .foregroundStyle(audio.isTransmitting ? Theme.signal : Theme.text)
 
             Ribbon(members: session.members,
@@ -325,7 +380,7 @@ struct LineView: View {
                     Image(systemName: "moon")
                     Text("Focus — mute the squad briefly")
                 }
-                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .font(.system(.subheadline, design: .rounded, weight: .medium))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
                 .foregroundStyle(Theme.text)
@@ -336,7 +391,7 @@ struct LineView: View {
 
             Button { showEndOptions = true } label: {
                 Text("Leave the line")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
             }
@@ -368,7 +423,7 @@ struct LineView: View {
 
     private var pushToTalkButton: some View {
         Text(audio.isTransmitting ? "Release to stop" : "Hold to talk")
-            .font(.system(size: 16.5, weight: .semibold, design: .rounded))
+            .font(.system(.callout, design: .rounded, weight: .semibold))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 21)
             .background(audio.isTransmitting ? Theme.signal : Theme.surface,
@@ -395,9 +450,9 @@ struct LineView: View {
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: session.selfMuted ? "mic.slash.fill" : "mic.fill")
-                    .font(.system(size: 20))
+                    .font(.system(.title3))
                 Text(session.selfMuted ? "Microphone off" : "Microphone on")
-                    .font(.system(size: 16.5, weight: .semibold, design: .rounded))
+                    .font(.system(.callout, design: .rounded, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 22)
@@ -412,10 +467,10 @@ struct LineView: View {
         VStack(spacing: 8) {
             HStack {
                 Text("Squad volume")
-                    .font(.system(size: 14.5, weight: .medium, design: .rounded))
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
                 Spacer()
                 Text("\(Int(PreferencesStore.shared.current.intercomVolume * 100))%")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(Theme.textDim)
             }
             Slider(value: Binding(
@@ -436,19 +491,19 @@ struct LineView: View {
     private var codeRow: some View {
         HStack(spacing: 10) {
             Text(session.squad?.joinCode ?? "")
-                .font(.system(size: 15, weight: .medium, design: .monospaced))
+                .font(.system(.subheadline, design: .monospaced, weight: .medium))
                 .tracking(3)
             Spacer()
             Button("Copy") {
                 UIPasteboard.general.string = session.squad?.joinCode
                 toasts.show("Code copied")
             }
-            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .font(.system(.footnote, design: .rounded, weight: .medium))
             .foregroundStyle(Theme.textDim)
             if let code = session.squad?.joinCode {
                 ShareLink(item: "Join my squad on Squadstream — code \(code)") {
                     Text("Share")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(.system(.footnote, design: .rounded, weight: .medium))
                         .foregroundStyle(Theme.textDim)
                 }
             }

@@ -59,7 +59,7 @@ struct SquadTabView: View {
                         if session.members.isEmpty {
                             Section {
                                 Text("Nobody else is on yet. Share your code and they drop straight in.")
-                                    .font(.system(size: 13.5, design: .rounded))
+                                    .font(.system(.footnote, design: .rounded))
                                     .foregroundStyle(Theme.textDim)
                             }
                         } else {
@@ -82,9 +82,9 @@ struct SquadTabView: View {
                 .foregroundStyle(audio.isTransmitting ? Theme.signal : Theme.textFaint)
                 .frame(width: 22)
             Text(PreferencesStore.shared.current.displayName)
-                .font(.system(size: 15, design: .rounded))
+                .font(.system(.subheadline, design: .rounded))
             Text("YOU")
-                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                .font(.system(.caption2, design: .rounded, weight: .semibold))
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(Theme.raised, in: RoundedRectangle(cornerRadius: 5))
                 .foregroundStyle(Theme.textDim)
@@ -107,14 +107,14 @@ struct RoutingCard: View {
                                      ? Theme.signal : Theme.textFaint)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(member.displayName).font(.system(size: 15, design: .rounded))
+                    Text(member.displayName).font(.system(.subheadline, design: .rounded))
                     if member.nearby {
                         Text("Nearby").font(.caption).foregroundStyle(Theme.textDim)
                     }
                 }
                 Spacer()
                 Text("\(Int(member.volume * 100))%")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(Theme.textDim)
             }
 
@@ -129,13 +129,13 @@ struct RoutingCard: View {
                 get: { !member.isMutedByMe },
                 set: { session.setMuted(!$0, for: member); Haptics.selection() }
             ))
-            .font(.system(size: 14, design: .rounded))
+            .font(.system(.footnote, design: .rounded))
 
             Toggle("They hear me", isOn: Binding(
                 get: { !member.isMutedToThem },
                 set: { session.setMutedToThem(!$0, for: member); Haptics.selection() }
             ))
-            .font(.system(size: 14, design: .rounded))
+            .font(.system(.footnote, design: .rounded))
 
             Text("Hold this card to talk to \(member.displayName) only")
                 .font(.caption)
@@ -143,7 +143,7 @@ struct RoutingCard: View {
 
             Button(role: .destructive) { reporting = true } label: {
                 Text("Block and report")
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
             }
             .sheet(isPresented: $reporting) { ReportSheet(member: member) }
         }

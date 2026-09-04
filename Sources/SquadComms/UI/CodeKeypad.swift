@@ -24,7 +24,7 @@ struct CodeKeypad: View {
                                 press(key)
                             } label: {
                                 Text(key)
-                                    .font(.system(size: 24, weight: .regular, design: .rounded))
+                                    .font(.system(.title2, design: .rounded, weight: .regular))
                                     .frame(maxWidth: .infinity, minHeight: 52)
                                     .background(Theme.surface,
                                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -58,7 +58,7 @@ struct CodeBoxes: View {
                 let character = index < code.count
                     ? String(Array(code)[index]) : ""
                 Text(character)
-                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .font(.system(.title, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                     .frame(width: 46, height: 58)
                     .background(Theme.surface,

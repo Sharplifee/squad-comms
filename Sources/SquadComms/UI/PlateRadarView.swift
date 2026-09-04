@@ -92,7 +92,7 @@ struct PlateRadarView: View {
                 // What each ring actually means. A radar without distances is
                 // a decoration.
                 Text(ringLabel(fraction: Double(fraction)))
-                    .font(.system(size: 8, design: .monospaced))
+                    .font(.system(.caption2, design: .monospaced))
                     .foregroundStyle(Theme.textFaint)
                     .offset(y: -r + 9)
             }
@@ -212,7 +212,7 @@ struct RangeLoaderView: View {
                     HStack {
                         ForEach(Array(ProximityEngine.rangeTicks.enumerated()), id: \.offset) { offset, tick in
                             Text(tick)
-                                .font(.system(size: 8))
+                                .font(.system(.caption2))
                                 .foregroundStyle(offset == index ? Theme.accent : Theme.textFaint)
                             if offset < ProximityEngine.rangeTicks.count - 1 { Spacer(minLength: 0) }
                         }
