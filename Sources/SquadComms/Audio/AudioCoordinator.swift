@@ -9,10 +9,10 @@ final class AudioCoordinator: ObservableObject {
     @Published private(set) var isTransmitting = false
     @Published private(set) var inputLevelDB: Float = -60
     @Published private(set) var micPermissionGranted = false
-    /// Revoked in Settings while the app was running. Distinct from never
-    /// having been granted, because the app was working a moment ago and the
-    /// person needs to know why it stopped.
-    @Published private(set) var micRevoked = false
+    /// Whether the mic was taken away mid-session. AppConditions owns what is
+    /// *displayed*; this exists only so the audio layer can stop trying to
+    /// transmit through a mic it no longer has.
+    private(set) var micRevoked = false
 
     /// Set when the squad asks "who's on". The UI reads it and clears it.
     @Published var rosterAnnouncement: String?
@@ -117,6 +117,9 @@ final class AudioCoordinator: ObservableObject {
         if micPermissionGranted && !granted {
             micRevoked = true
             vad.stop()
+            // Keep the banner and the audio layer from disagreeing: one
+            // refresh, one answer.
+            AppConditions.shared.refresh()
             Log.audio.error("microphone permission REVOKED while running — transmission stopped")
         } else if granted {
             micRevoked = false
