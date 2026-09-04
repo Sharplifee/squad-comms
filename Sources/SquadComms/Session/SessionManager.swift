@@ -300,7 +300,24 @@ final class SessionManager: ObservableObject {
         try await withTimeout(Self.connectTimeout) {
             try await self.room.connect(url: Config.liveKitURL, token: token)
         }
-        try await room.localParticipant.setMicrophone(enabled: false)
+        // The microphone is published ONCE and stays published for the whole
+        // session. It is an open line, not a radio — see setMicrophone below
+        // for why toggling it per utterance was wrong.
+        //
+        // DTX stops sending packets during silence, which is what makes an
+        // always-on channel affordable. That is the mechanism for this, not
+        // publishing and unpublishing a track around every sentence.
+        try await room.localParticipant.setMicrophone(
+            enabled: true,
+            captureOptions: captureOptions(),
+            // red adds redundant encoding, which is what keeps speech intact
+            // over a gym's wifi rather than gapping on every lost packet.
+            publishOptions: AudioPublishOptions(dtx: true, red: true)
+        )
+        // Start silent if the person left themselves muted last session.
+        if selfMuted {
+            try? await room.localParticipant.setMicrophone(enabled: false)
+        }
 
         self.squad = squad
         UserDefaults.standard.set(squad.joinCode, forKey: "squadcomms.lastCode")
@@ -443,14 +460,50 @@ final class SessionManager: ObservableObject {
         )
     }
 
+    /// Deliberately does nothing to the track.
+    ///
+    /// This used to publish the microphone when VAD detected speech and
+    /// unpublish it when speech stopped, once per sentence. That clips the
+    /// first syllable of everything you say, because the track has to be
+    /// negotiated and start flowing before any audio reaches anyone — and it
+    /// is the opposite of the product, which is an open line rather than
+    /// push-to-talk with the button pressed by your voice.
+    ///
+    /// The track is now published once at connect and stays up. DTX handles
+    /// the silence. VAD still runs, but it drives the interface and the
+    /// ducking signal, not the transport.
     func setMicrophone(enabled: Bool) {
-        guard !selfMuted else { return }
-        Task { try? await room.localParticipant.setMicrophone(enabled: enabled) }
+        // Intentionally empty. Kept so the VAD callbacks have somewhere to
+        // land while the meaning of "transmitting" is purely visual.
+    }
+
+    /// The one thing that genuinely should mute the track: the person asked.
+    /// WebRTC's own processing, matched to the noise-suppression preference.
+    ///
+    /// This is a different layer from the audio session mode, and the two must
+    /// agree — running WebRTC noise suppression while the session is in a mode
+    /// that already processes heavily is how a voice ends up sounding
+    /// underwater.
+    private func captureOptions() -> AudioCaptureOptions {
+        switch PreferencesStore.shared.current.noiseSuppression {
+        case .none:
+            return AudioCaptureOptions(echoCancellation: false,
+                                       autoGainControl: false,
+                                       noiseSuppression: false)
+        case .standard:
+            return AudioCaptureOptions(echoCancellation: true,
+                                       autoGainControl: false,
+                                       noiseSuppression: false)
+        case .active:
+            return AudioCaptureOptions(echoCancellation: true,
+                                       autoGainControl: true,
+                                       noiseSuppression: true)
+        }
     }
 
     func setSelfMuted(_ muted: Bool) {
         selfMuted = muted
-        if muted { Task { try? await room.localParticipant.setMicrophone(enabled: false) } }
+        Task { try? await room.localParticipant.setMicrophone(enabled: !muted) }
         refreshActivity()
     }
 
