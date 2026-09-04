@@ -680,6 +680,17 @@ extension SessionManager: RoomDelegate {
             guard let id = UUID(uuidString: participant.identity?.stringValue ?? "") else { return }
             members.removeAll { $0.id == id }
             PrivateLineTones.left()
+
+            // If the person who left was holding a private line open with us,
+            // that line has to close too — otherwise our audio stays routed to
+            // somebody who is no longer in the room and everyone else stays
+            // silent to us for no visible reason.
+            if privateLineTo == id || privateLineFrom == id {
+                privateLineTo = nil
+                privateLineFrom = nil
+                PrivateLineTones.closed()
+                applyRemoteVolumes()
+            }
             refreshActivity()
             speakingRemotes.remove(id)
             onRemoteSpeech?(!speakingRemotes.isEmpty)
