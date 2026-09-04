@@ -224,18 +224,6 @@ struct Backend {
         _ = try await client.rpc("touch_squad", params: P(p_squad_id: squadID.uuidString)).execute()
     }
 
-    func squad(forCode code: String) async throws -> Squad {
-        guard let client else { throw BackendError.notConfigured }
-        let rows: [Squad] = try await client.from("squads")
-            .select()
-            .eq("join_code", value: code)
-            .limit(1)
-            .execute()
-            .value
-        guard let squad = rows.first else { throw BackendError.codeNotFound }
-        return squad
-    }
-
     func token(for squadID: UUID, displayName: String) async throws -> String {
         guard let client else { throw BackendError.notConfigured }
         struct Response: Decodable { let token: String }

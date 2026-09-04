@@ -1,5 +1,6 @@
 import SwiftUI
 import Contacts
+import UIKit
 
 /// Who you already know that has the app.
 ///
@@ -43,6 +44,16 @@ struct ContactsView: View {
             .searchable(text: $query, prompt: "Search contacts")
             .refreshable { await matcher.scan() }
             .task {
+                // Publish our own hash first. Matching is symmetric: if we
+                // never register, everybody who has our number searches and
+                // finds nothing, and the feature looks broken from their side
+                // rather than ours.
+                await matcher.registerSelf(
+                    phoneNumber: nil,
+                    deviceID: UIDevice.current.identifierForVendor?.uuidString ?? "unknown",
+                    displayName: PreferencesStore.shared.current.displayName,
+                    ghost: PreferencesStore.shared.current.visibility == .hidden
+                )
                 switch matcher.permission {
                 case .denied, .restricted, .notDetermined: break
                 default: await matcher.scan()

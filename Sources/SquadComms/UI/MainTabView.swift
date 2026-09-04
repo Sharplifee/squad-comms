@@ -137,6 +137,10 @@ struct RoutingCard: View {
             ))
             .font(.system(size: 14, design: .rounded))
 
+            Text("Hold this card to talk to \(member.displayName) only")
+                .font(.caption)
+                .foregroundStyle(Theme.dim)
+
             Button(role: .destructive) { reporting = true } label: {
                 Text("Block and report")
                     .font(.system(size: 12.5, weight: .semibold, design: .rounded))
@@ -145,5 +149,16 @@ struct RoutingCard: View {
         }
         .padding(.vertical, 4)
         .tint(Theme.signal)
+        .contentShape(Rectangle())
+        // The private line had a complete implementation — distinct earcons at
+        // both ends, reliable routing events, everyone else ducked to 12% —
+        // and no way to trigger it after the redesign replaced the row that
+        // held the gesture. It has been dead since.
+        .gesture(
+            LongPressGesture(minimumDuration: 0.35)
+                .onEnded { _ in session.beginPrivateLine(to: member) }
+                .sequenced(before: DragGesture(minimumDistance: 0))
+                .onEnded { _ in session.endPrivateLine() }
+        )
     }
 }

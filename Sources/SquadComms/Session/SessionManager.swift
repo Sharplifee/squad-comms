@@ -51,6 +51,8 @@ final class SessionManager: ObservableObject {
     @Published private(set) var selfMuted = false
     /// When the current session began, for the diagnostics readout.
     @Published private(set) var sessionStart: Date?
+    /// Called when the line closes so the audio layer can release the session.
+    var onLeave: (() -> Void)?
     /// Set when somebody else closed the line, so the UI can say so rather
     /// than looking like a disconnection.
     @Published var endedByHost = false
@@ -251,6 +253,10 @@ final class SessionManager: ObservableObject {
         heartbeat?.invalidate(); heartbeat = nil
         MuteBridge.shared.toggle = nil
         LineActivityController.shared.end()
+        // Without this the system keeps ducking whatever is playing after we
+        // have gone — the music never comes back to full and there is nothing
+        // left on screen to explain why.
+        onLeave?()
         envelopes.removeAll()
         members.removeAll()
         speakingRemotes.removeAll()

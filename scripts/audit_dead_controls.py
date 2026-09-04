@@ -118,6 +118,47 @@ def find_orphan_views() -> list[str]:
     return sorted(orphans)
 
 
+# Called by the system, not by us.
+DELEGATE_METHODS = {
+    "centralManagerDidUpdateState", "centralManager",
+    "peripheralManagerDidUpdateState", "peripheralManager",
+    "perform", "application", "room", "body", "makeBody",
+}
+
+
+def find_uncalled_methods() -> list[str]:
+    """Non-private methods in the session and audio layers that nothing calls.
+
+    This is the third shape of the same bug. Private lines had earcons,
+    reliable routing and ducking, and no gesture left to trigger them.
+    Push-to-talk had no button. registerSelf was never called, so contact
+    matching could never find anybody. The audio session was never
+    deactivated, so music stayed ducked after leaving.
+
+    Every one of them compiled, shipped, and did nothing.
+    """
+    layers = [f for f in swift_files()
+              if "/Session/" in str(f) or "/Audio/" in str(f)]
+    texts = {f: f.read_text() for f in swift_files()}
+
+    uncalled = []
+    for path in layers:
+        for match in re.finditer(r"^\s{4}(?!private)(?:@MainActor\s+)?func\s+(\w+)",
+                                 texts[path], re.M):
+            name = match.group(1)
+            if name in DELEGATE_METHODS:
+                continue
+            uses = 0
+            for other, text in texts.items():
+                body = text
+                if other == path:
+                    body = re.sub(r"func\s+" + re.escape(name) + r"\b", "", body)
+                uses += len(re.findall(r"[.\s]" + re.escape(name) + r"\s*\(", body))
+            if uses == 0:
+                uncalled.append(f"{name} ({path.relative_to(ROOT)})")
+    return sorted(uncalled)
+
+
 def main() -> int:
     problems = 0
 
@@ -138,6 +179,14 @@ def main() -> int:
             print(f"  {orphan}")
         print("  Dead UI reads as a working feature. Mount it or delete it.\n")
 
+    uncalled = find_uncalled_methods()
+    if uncalled:
+        problems += len(uncalled)
+        print("UNCALLED METHODS — behaviour nothing can reach:")
+        for method in uncalled:
+            print(f"  {method}")
+        print("  A feature with no caller ships as dead code that reads as done.\n")
+
     clashes = find_duplicate_enums()
     if clashes:
         problems += len(clashes)
@@ -151,7 +200,7 @@ def main() -> int:
         print(f"{problems} problem(s). See scripts/audit_dead_controls.py.")
         return 1
 
-    print("No dead settings, no orphan views, no duplicate enums.")
+    print("No dead settings, no orphan views, no uncalled methods, no duplicate enums.")
     return 0
 
 

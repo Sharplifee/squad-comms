@@ -51,6 +51,11 @@ final class AudioCoordinator: ObservableObject {
 
     func attach(session: SessionManager) {
         self.session = session
+        session.onLeave = { [weak self] in
+            self?.stopListening()
+            // Hand the session back so the music app returns to full volume.
+            self?.audioSession.deactivate()
+        }
         session.onRemoteSpeech = { [weak self] speaking in
             guard let self else { return }
             let prefs = PreferencesStore.shared.current

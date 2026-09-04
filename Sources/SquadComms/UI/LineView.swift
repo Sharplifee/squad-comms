@@ -298,7 +298,36 @@ struct LineView: View {
 
     /// The biggest target on the screen, because it is the one thing you reach
     /// for without looking.
+    /// With open mic off there was previously no way to transmit at all — the
+    /// mic button only toggled mute, and push-to-talk had no control anywhere.
+    @ViewBuilder
     private var micControl: some View {
+        if prefs.openMic { openMicButton } else { pushToTalkButton }
+    }
+
+    private var pushToTalkButton: some View {
+        Text(audio.isTransmitting ? "Release to stop" : "Hold to talk")
+            .font(.system(size: 16.5, weight: .semibold, design: .rounded))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 21)
+            .background(audio.isTransmitting ? Theme.signal : Theme.surface,
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .foregroundStyle(audio.isTransmitting ? Theme.base : Theme.text)
+            .padding(.horizontal, 22)
+            .padding(.top, 20)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        guard !audio.isTransmitting else { return }
+                        audio.pushToTalkDown()
+                        Haptics.impact(.medium)
+                    }
+                    .onEnded { _ in audio.pushToTalkUp() }
+            )
+    }
+
+    private var openMicButton: some View {
         Button {
             session.setSelfMuted(!session.selfMuted)
             Haptics.impact(.medium)
