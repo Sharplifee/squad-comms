@@ -246,12 +246,6 @@ struct Backend {
 
     /// Push the expiry out while a line is genuinely in use, so a code cannot
     /// lapse mid-workout.
-    func touch(squadID: UUID) async throws {
-        guard let client else { throw BackendError.notConfigured }
-        struct P: Encodable { let p_squad_id: String }
-        _ = try await client.rpc("touch_squad", params: P(p_squad_id: squadID.uuidString)).execute()
-    }
-
     func token(for squadID: UUID, displayName: String) async throws -> String {
         guard let client else { throw BackendError.notConfigured }
         struct Response: Decodable { let token: String }

@@ -141,9 +141,20 @@ struct RoutingCard: View {
                 .font(.caption)
                 .foregroundStyle(Theme.dim)
 
-            Button(role: .destructive) { reporting = true } label: {
-                Text("Block and report")
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
+            HStack(spacing: 16) {
+                // Blocking and reporting are different acts. Somebody whose mic
+                // keeps picking up a leaf blower does not need reporting to
+                // anybody — they just need to stop being audible.
+                Button(role: .destructive) {
+                    Task { await session.block(member: member) }
+                } label: {
+                    Text("Block")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                }
+                Button(role: .destructive) { reporting = true } label: {
+                    Text("Block and report")
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                }
             }
             .sheet(isPresented: $reporting) { ReportSheet(member: member) }
         }
