@@ -114,6 +114,39 @@ jobs:
           BUILD=$((GITHUB_RUN_NUMBER + 100))
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$PLIST"
           echo "BUILD_NUMBER=$BUILD" >> "$GITHUB_ENV"
+
+          # Every embedded bundle must carry the SAME CFBundleVersion and
+          # CFBundleShortVersionString as the app it ships inside, or Apple
+          # rejects the package (ITMS-90473 / "must match"). Only the app's
+          # plist was stamped, so the watch app and the widget extension kept
+          # whatever literal project.yml held - and the moment the app's
+          # stamped number diverged from that literal, which is every run, the
+          # upload was set to fail on a mismatch that never appears in the
+          # archive or the export step.
+          SHORT=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")
+          for EMBEDDED in Sources/SquadCommsWatch/Info.plist Sources/SquadCommsWidgets/Info.plist; do
+            if [ -f "$EMBEDDED" ]; then
+              /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$EMBEDDED" \
+                || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD" "$EMBEDDED"
+              /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SHORT" "$EMBEDDED" \
+                || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $SHORT" "$EMBEDDED"
+              echo "stamped $EMBEDDED -> $SHORT ($BUILD)"
+            else
+              echo "expected embedded plist missing: $EMBEDDED"; exit 1
+            fi
+          done
+
+          # Fail here rather than at Apple: altool reports a version mismatch
+          # minutes after a full archive has already been paid for.
+          for EMBEDDED in Sources/SquadCommsWatch/Info.plist Sources/SquadCommsWidgets/Info.plist; do
+            EB=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$EMBEDDED")
+            ES=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$EMBEDDED")
+            if [ "$EB" != "$BUILD" ] || [ "$ES" != "$SHORT" ]; then
+              echo "version mismatch in $EMBEDDED: $ES ($EB) vs app $SHORT ($BUILD)"; exit 1
+            fi
+          done
+          echo "app and embedded bundles all at $SHORT ($BUILD)"
+
           echo "--- config keys in Info.plist (masked) ---"
           for k in LIVEKIT_URL SUPABASE_URL SUPABASE_ANON_KEY; do
             v=$(/usr/libexec/PlistBuddy -c "Print :$k" "$PLIST" 2>/dev/null)
