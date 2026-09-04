@@ -843,7 +843,7 @@ extension SessionManager: RoomDelegate {
                 // Anybody still here claims the expiry. Idempotent server-side,
                 // so it does not matter that several clients may do this at
                 // the same moment when the creator drops.
-                Task { try? await backend.extendSquad(id: squad.id, deviceID: deviceID) }
+                Task { await backend.touchSquad(squadID: squad.id) }
             }
 
             if members.isEmpty {
