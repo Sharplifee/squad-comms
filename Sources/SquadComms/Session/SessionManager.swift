@@ -67,6 +67,11 @@ final class SessionManager: ObservableObject {
     /// Blocked device ids, applied on join so a blocked person cannot reach
     /// you by starting a fresh session.
     @Published private(set) var blockedIDs: Set<String> = []
+    /// Set when this device opened the current line. Closing it for everybody
+    /// is the only thing a creator can do that a participant cannot — there is
+    /// no muting, kicking or approving, so there is nothing to hand off if the
+    /// creator leaves. The line simply continues.
+    @Published private(set) var isCreator = false
     private var heartbeatTask: Task<Void, Never>?
 
     /// Our own LiveKit identity, used to tell whether an inbound private line
@@ -182,6 +187,7 @@ final class SessionManager: ObservableObject {
             switch result.outcome {
             case "ok":
                 guard let squad = result.squad else { throw SessionError.timedOut }
+                isCreator = result.isCreator ?? false
                 try await connect(to: squad)
             case "taken":
                 // Somebody is live on that code right now. Dropping the caller
@@ -212,6 +218,7 @@ final class SessionManager: ObservableObject {
             switch result.outcome {
             case "ok":
                 guard let squad = result.squad else { throw SessionError.timedOut }
+                isCreator = result.isCreator ?? false
                 try await connect(to: squad)
             case "rate_limited":
                 // Never a wall. This exists to slow somebody sweeping the code
@@ -383,6 +390,7 @@ final class SessionManager: ObservableObject {
         squad = nil
         sessionStart = nil
         state = .idle
+        isCreator = false
     }
 
     /// Close the line for everyone in it.
@@ -394,7 +402,9 @@ final class SessionManager: ObservableObject {
         broadcast(.sessionEnded)
         // Let the message leave before tearing down the room it travels over.
         try? await Task.sleep(nanoseconds: 250_000_000)
-        if let id = squad?.id { try? await backend.endSquad(id: id) }
+        if let id = squad?.id {
+            try? await backend.endSquad(id: id, deviceID: deviceID)
+        }
         await leave()
     }
 

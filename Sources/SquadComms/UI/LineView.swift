@@ -42,13 +42,19 @@ struct LineView: View {
             .sheet(isPresented: $showJoin) { SwitchSquadSheet() }
             .confirmationDialog("End this session?", isPresented: $showEndOptions,
                                 titleVisibility: .visible) {
-                Button("End for everyone", role: .destructive) {
-                    Task { await session.endForEveryone() }
+                // Only offered to whoever opened the line. Anyone joining your
+                // gym line could otherwise shut it down for the whole squad.
+                if session.isCreator {
+                    Button("End for everyone", role: .destructive) {
+                        Task { await session.endForEveryone() }
+                    }
                 }
                 Button("Just leave") { Task { await session.leave() } }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("You can step out on your own, or close the line for everyone on it.")
+                Text(session.isCreator
+                     ? "You can step out on your own, or close the line for everyone on it."
+                     : "The line stays open for everyone else.")
             }
         }
         .task(id: session.squad?.id) {

@@ -41,6 +41,9 @@ struct Backend {
         let squadID: UUID?
         let squadName: String?
         let joinCode: String?
+        /// Whether this device opened the line. The only thing a creator can
+        /// do that others cannot is close it for everybody.
+        let isCreator: Bool?
 
         enum CodingKeys: String, CodingKey {
             case outcome    = "r_outcome"
@@ -48,6 +51,7 @@ struct Backend {
             case squadID    = "r_squad_id"
             case squadName  = "r_squad_name"
             case joinCode   = "r_join_code"
+            case isCreator  = "r_is_creator"
         }
 
         var squad: Squad? {
@@ -113,10 +117,16 @@ struct Backend {
     }
 
     /// Close a line for everyone and free its code for reuse.
-    func endSquad(id: UUID) async throws {
+    /// Close a line for everyone. Refused server-side unless this device
+    /// opened it, so hiding the button is a courtesy rather than the control.
+    @discardableResult
+    func endSquad(id: UUID, deviceID: String) async throws -> Bool {
         guard let client else { throw BackendError.notConfigured }
-        struct P: Encodable { let p_squad_id: String }
-        _ = try await client.rpc("end_squad", params: P(p_squad_id: id.uuidString)).execute()
+        struct P: Encodable { let p_squad_id: String; let p_device_id: String }
+        let allowed: Bool = try await client
+            .rpc("end_squad", params: P(p_squad_id: id.uuidString, p_device_id: deviceID))
+            .execute().value
+        return allowed
     }
 
     // MARK: - Contacts
