@@ -314,7 +314,66 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Controls
 
+    /// Every 45 seconds, comfortably inside the 2 minute presence window so a
+    /// single missed beat does not evict somebody mid-set.
+    private func startHeartbeat() {
+        heartbeatTask?.cancel()
+        guard let id = squad?.id else { return }
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                await self.backend.heartbeat(squadID: id, deviceID: self.deviceID)
+            }
+        }
+    }
+
     /// Step out on your own. The line stays open for everyone else.
+    func leave() async {
+        heartbeatTask?.cancel(); heartbeatTask = nil
+        // Release the seat immediately. The last person out also closes the
+        // line, so its code is freed rather than reserved for twelve hours
+        // after everyone has gone.
+        if let id = squad?.id { await backend.leaveSquad(squadID: id, deviceID: deviceID) }
+        await room.disconnect()
+        proximity.stop()
+        LineActivityController.shared.stop()
+        members.removeAll()
+        speakingRemotes.removeAll()
+        squad = nil
+        sessionStart = nil
+        state = .idle
+    }
+
+    /// Close the line for everyone in it.
+    ///
+    /// Distinct from leaving. Walking out of a finished workout and leaving
+    /// people connected to an empty room is not what you meant, but neither is
+    /// kicking everybody every time you personally need to go.
+    func endForEveryone() async {
+        broadcast(.sessionEnded)
+        // Let the message leave before tearing down the room it travels over.
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        if let id = squad?.id { try? await backend.endSquad(id: id) }
+        await leave()
+    }
+
+    private func handleSessionEnded() async {
+        endedByHost = true
+        await leave()
+    }
+
+    func reset() { state = .idle }
+
+    /// Rejoin the same line after a drop LiveKit cannot recover from.
+    func reconnectIfNeeded() async {
+        guard let squad else { return }
+        await room.disconnect()
+        state = .connecting
+        do { try await connect(to: squad) }
+        catch { state = .failed(friendly(error)) }
+    }
+
     /// Keep the lock screen honest about who is talking.
     private func refreshActivity() {
         guard let start = sessionStart else { return }
