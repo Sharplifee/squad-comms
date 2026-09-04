@@ -328,6 +328,52 @@ final class SessionManager: ObservableObject {
         }
     }
 
+    // MARK: - Safety
+
+    /// Stop hearing somebody, without reporting them.
+    ///
+    /// Different act from reporting: a mic picking up a leaf blower does not
+    /// need reporting to anybody, it just needs to stop being audible.
+    func block(member: Member) async {
+        try? await backend.block(blocker: deviceID, blocked: member.id.uuidString)
+        setMuted(true, for: member)
+        blockedIDs.insert(member.id.uuidString)
+    }
+
+    /// Reporting always blocks as well, because asking "and would you also
+    /// like to stop hearing them?" straight after somebody reports abuse is a
+    /// bad question.
+    func report(member: Member, reason: String, detail: String?) async {
+        try? await backend.report(reporter: deviceID, reported: member.id.uuidString,
+                                  squadID: squad?.id, reason: reason, detail: detail)
+        setMuted(true, for: member)
+        blockedIDs.insert(member.id.uuidString)
+    }
+
+    func unblock(deviceID target: String) async {
+        try? await backend.unblock(blocker: deviceID, blocked: target)
+        blockedIDs.remove(target)
+    }
+
+    func blockedList() async -> [Backend.BlockedRow] {
+        (try? await backend.blockedList(blocker: deviceID)) ?? []
+    }
+
+    func deleteMyData() async {
+        try? await backend.deleteMyData(deviceID: deviceID)
+        await leave()
+        UserDefaults.standard.removeObject(forKey: "squadcomms.lastCode")
+        UserDefaults.standard.removeObject(forKey: "squadcomms.onboarded")
+    }
+
+    /// Blocks load before anything connects, so a blocked person is silent
+    /// from the first packet rather than after a round trip.
+    func loadBlocks() async {
+        blockedIDs = Set((try? await backend.blockedList(blocker: deviceID))?.map(\.deviceID) ?? [])
+    }
+
+    // MARK: - Controls
+
     /// Step out on your own. The line stays open for everyone else.
     func leave() async {
         heartbeatTask?.cancel(); heartbeatTask = nil
@@ -337,7 +383,7 @@ final class SessionManager: ObservableObject {
         if let id = squad?.id { await backend.leaveSquad(squadID: id, deviceID: deviceID) }
         await room.disconnect()
         proximity.stop()
-        LineActivityController.shared.stop()
+        LineActivityController.shared.end()
         members.removeAll()
         speakingRemotes.removeAll()
         squad = nil
