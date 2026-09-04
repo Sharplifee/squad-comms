@@ -814,14 +814,6 @@ extension SessionManager: RoomDelegate {
             speakingRemotes.remove(id)
             onRemoteSpeech?(!speakingRemotes.isEmpty)
 
-            // A private line whose other end just vanished would otherwise
-            // leave the whole squad ducked to 12% with nobody to talk to.
-            if privateLineTo?.id == id || privateLineFrom?.id == id {
-                privateLineTo = nil
-                privateLineFrom = nil
-                applyRemoteVolumes()
-            }
-
             // Host handoff. Nobody owns the room in LiveKit terms, but the
             // squad row has a creator, and if that person leaves the code
             // would expire on their schedule rather than the group's. The
@@ -832,6 +824,13 @@ extension SessionManager: RoomDelegate {
                 // somebody stepping outside for two minutes should not end
                 // the session for the person still lifting.
                 Log.session.info("last remote left; line held open")
+            }
+
+            // Whoever is still here takes the row over, so it stops pointing
+            // at a creator who has gone. Claims only a genuine orphan, so the
+            // common case where the creator is still present is a no-op.
+            if let squad {
+                Task { try? await backend.claimSquad(id: squad.id, deviceID: deviceID) }
             }
         }
     }
