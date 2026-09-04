@@ -100,11 +100,30 @@ struct Backend {
     /// Without a heartbeat a force-quit leaves somebody occupying a seat
     /// forever, and a cap that counts ghosts starts locking out the very
     /// people it was meant to protect.
+    ///
+    /// The same tick renews the squad's expiry. A heartbeat is the only
+    /// evidence the server has that a line is genuinely in use, so it is the
+    /// honest place to push expiry out — otherwise expiry is fixed at the
+    /// moment the line opened and can lapse under people still talking on it.
     func heartbeat(squadID: UUID, deviceID: String) async {
         guard let client else { return }
         struct P: Encodable { let p_squad_id: String; let p_device_id: String }
         _ = try? await client.rpc("heartbeat",
             params: P(p_squad_id: squadID.uuidString, p_device_id: deviceID)).execute()
+        await touchSquad(squadID: squadID)
+    }
+
+    /// Push the expiry out while a line is genuinely in use, so a code cannot
+    /// lapse mid-workout.
+    ///
+    /// Failure is swallowed for the same reason the heartbeat's is: the next
+    /// tick renews it anyway, and a transient miss is not worth interrupting a
+    /// session over.
+    func touchSquad(squadID: UUID) async {
+        guard let client else { return }
+        struct P: Encodable { let p_squad_id: String }
+        _ = try? await client.rpc("touch_squad",
+            params: P(p_squad_id: squadID.uuidString)).execute()
     }
 
     /// Step out. The last person out closes the line, so its code is released
@@ -254,8 +273,8 @@ struct Backend {
         return rows.first?.host
     }
 
-    /// Push the expiry out while a line is genuinely in use, so a code cannot
-    /// lapse mid-workout.
+    /// A short-lived LiveKit token for this squad, minted server-side so the
+    /// API secret never ships in the app.
     func token(for squadID: UUID, displayName: String) async throws -> String {
         guard let client else { throw BackendError.notConfigured }
         struct Response: Decodable { let token: String }
