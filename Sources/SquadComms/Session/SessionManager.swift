@@ -685,7 +685,7 @@ extension SessionManager: RoomDelegate {
             // that line has to close too — otherwise our audio stays routed to
             // somebody who is no longer in the room and everyone else stays
             // silent to us for no visible reason.
-            if privateLineTo == id || privateLineFrom == id {
+            if privateLineTo?.id == id || privateLineFrom?.id == id {
                 privateLineTo = nil
                 privateLineFrom = nil
                 PrivateLineTones.closed()
