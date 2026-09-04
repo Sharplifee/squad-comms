@@ -17,6 +17,7 @@ struct SquadCommsApp: App {
                 .task {
                     Telemetry.start()
                     audio.attach(session: session)
+                    session.attachWatch()
                     await session.restoreLastSession()
                 }
                 .onChange(of: scenePhase) { _, phase in

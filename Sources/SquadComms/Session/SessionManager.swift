@@ -142,6 +142,23 @@ final class SessionManager: ObservableObject {
         }
     }
 
+    /// Wire the wrist button to the same path the on-screen control uses, so
+    /// they cannot drift apart.
+    func attachWatch() {
+        PhoneLink.shared.onMuteRequest = { [weak self] muted in
+            Task { @MainActor in self?.setSelfMuted(muted) }
+        }
+    }
+
+    /// What the wrist should show. Called whenever any of it changes.
+    func pushToWatch() {
+        PhoneLink.shared.push(
+            onLine: squad != nil,
+            muted: selfMuted,
+            talking: members.filter { $0.isSpeaking && !$0.isMutedByMe }.map(\.displayName)
+        )
+    }
+
     func loadBlocks() async {
         let rows = (try? await backend.blockedList(blocker: deviceID)) ?? []
         blockedIDs = Set(rows.map(\.deviceID))
@@ -451,6 +468,9 @@ final class SessionManager: ObservableObject {
 
     /// Keep the lock screen honest about who is talking.
     private func refreshActivity() {
+        // The wrist mirrors the same facts the Live Activity does, so it
+        // updates from the same place rather than a parallel set of hooks.
+        pushToWatch()
         guard let start = sessionStart else { return }
         LineActivityController.shared.update(
             speaker: members.first(where: { $0.isSpeaking && !$0.isMutedByMe })?.displayName,
