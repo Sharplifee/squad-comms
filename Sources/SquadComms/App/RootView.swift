@@ -29,47 +29,15 @@ struct RootView: View {
         Group {
             switch session.state {
             case .connecting:           ConnectingView()
-            case .failed(let message):  FailureView(message: message)
+            // There is deliberately no failure route. Nothing that can go
+            // wrong here justifies replacing the whole app with a wall — a
+            // taken code or a dropped connection is information you act on
+            // from the screen you were already on. Failures surface as
+            // session.notice, inline.
             default:                    MainTabView()
             }
         }
         .animation(.easeInOut(duration: 0.25), value: session.state)
-    }
-}
-
-struct FailureView: View {
-    let message: String
-    @EnvironmentObject private var session: SessionManager
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Couldn't connect").font(.title2.weight(.semibold))
-            Text(message)
-                .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            // reset() alone only returned to .idle and left the user staring
-            // at a spinner, because nothing re-drove the connect. Retry has to
-            // actually retry.
-            Button("Try again") {
-                Task {
-                    session.reset()
-                    // Retry means rejoin the code we were told to open, not
-                    // create a fresh squad — creating one would strand the
-                    // person you were trying to reach on the original code.
-                    if let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode") {
-                        await session.join(code: code)
-                    }
-                }
-            }
-            .font(.system(size: 15, weight: .semibold, design: .rounded))
-            .padding(.vertical, 14)
-            .frame(maxWidth: 220)
-            .background(Theme.text, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .foregroundStyle(Theme.base)
-            .frame(maxWidth: 220)
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.background)
     }
 }
 

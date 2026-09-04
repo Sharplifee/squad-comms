@@ -38,6 +38,33 @@ struct ConditionBanners: View {
                        action: ("Open Settings", openSettings))
             }
 
+            // Something you just tried did not work. Dismissible, inline, and
+            // it never stops you doing anything else.
+            if let notice = session.notice {
+                HStack(alignment: .top, spacing: 11) {
+                    Image(systemName: "exclamationmark.circle")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.signal)
+                    Text(notice)
+                        .font(.system(size: 12.5, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button {
+                        session.notice = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                    }
+                }
+                .padding(14)
+                .background(Theme.signal.opacity(0.11),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Theme.signal.opacity(0.3), lineWidth: 1))
+            }
+
             if session.endedByHost {
                 banner(symbol: "phone.down.fill",
                        title: "The line was closed",

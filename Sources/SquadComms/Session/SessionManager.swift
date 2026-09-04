@@ -56,6 +56,13 @@ final class SessionManager: ObservableObject {
     /// Set when somebody else closed the line, so the UI can say so rather
     /// than looking like a disconnection.
     @Published var endedByHost = false
+    /// The last thing that went wrong, shown inline where you were working.
+    ///
+    /// Distinct from `.failed`, which replaces the entire app. Almost nothing
+    /// deserves that: "that code is taken" and "that line is full" are facts
+    /// you act on from the screen you are already on, not reasons to make the
+    /// app unusable until you dismiss them.
+    @Published var notice: String?
     /// Blocked device ids, applied on join so a blocked person cannot reach
     /// you by starting a fresh session.
     @Published private(set) var blockedIDs: Set<String> = []
@@ -163,14 +170,18 @@ final class SessionManager: ObservableObject {
                 // Somebody is live on that code right now. Dropping the caller
                 // into a stranger's open microphone is the one outcome that
                 // must never happen silently.
-                state = .failed("That code is already in use. Pick another, or join it instead.")
+                notice = "That code is already in use. Pick another, or join it instead."
+                state = .idle
             case "invalid":
-                state = .failed("Codes are 3 to 8 digits.")
+                notice = "Codes are 3 to 8 digits."
+                state = .idle
             default:
-                state = .failed("Couldn't open the line.")
+                notice = "Couldn't open the line. Try again."
+                state = .idle
             }
         } catch {
-            state = .failed(friendly(error))
+            notice = friendly(error)
+            state = .idle
         }
     }
 
@@ -198,18 +209,24 @@ final class SessionManager: ObservableObject {
                     state = .idle
                 }
             case "not_found":
-                state = .failed("No line open on that code.")
+                notice = "No line open on that code yet — open it instead?"
+                state = .idle
             case "expired":
-                state = .failed("That line has ended.")
+                notice = "That line has ended."
+                state = .idle
             case "full":
-                state = .failed("That line is full.")
+                notice = "That line is full."
+                state = .idle
             case "invalid":
-                state = .failed("Codes are 3 to 8 digits.")
+                notice = "Codes are 3 to 8 digits."
+                state = .idle
             default:
-                state = .failed("Couldn't join.")
+                notice = "Couldn't join. Try again."
+                state = .idle
             }
         } catch {
-            state = .failed(friendly(error))
+            notice = friendly(error)
+            state = .idle
         }
     }
 
@@ -261,6 +278,7 @@ final class SessionManager: ObservableObject {
             proximity.start(squadID: squad.id, selfID: me)
         }
         sessionStart = Date()
+        notice = nil
         state = .connected
         SavedSquadStore.shared.remember(code: squad.joinCode, name: squad.name,
                                         members: members.map(\.displayName))
@@ -331,7 +349,9 @@ final class SessionManager: ObservableObject {
         do {
             try await connect(to: squad)
         } catch {
-            state = .failed(friendly(error))
+            // A failed reconnect leaves the line closed, not the app broken.
+            notice = friendly(error)
+            state = .idle
         }
     }
 
