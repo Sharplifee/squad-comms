@@ -33,6 +33,9 @@ jobs:
       # auto-pause, then the music choice and the visibility picker. Every one
       # was invisible in review and on device: the UI responds and nothing
       # happens. Cheap to check, so check it every build.
+      # Before anything is generated or built, so a control that moves and
+      # does nothing fails in seconds rather than after a full build and an
+      # upload. This has shipped three times.
       - name: Audit for dead settings
         run: python3 scripts/audit_dead_controls.py
 
@@ -109,12 +112,6 @@ jobs:
             if [ -n "$v" ]; then echo "$k = ${v:0:18}... (len ${#v})"; else echo "$k = MISSING"; exit 1; fi
           done
           echo "CFBundleVersion = $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")"
-
-      # Runs before the archive so a dead control fails in seconds rather
-      # than after a full build, an upload, and somebody finding a slider that
-      # does nothing.
-      - name: Audit for dead controls
-        run: python3 scripts/audit_dead_controls.py
 
       - name: Archive
         run: |
