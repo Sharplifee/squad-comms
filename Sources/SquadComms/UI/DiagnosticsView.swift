@@ -14,10 +14,34 @@ struct DiagnosticsView: View {
     @EnvironmentObject private var session: SessionManager
     @EnvironmentObject private var audio: AudioCoordinator
     @State private var copied = false
+    @State private var selfTest: [AudioSelfTest.Check] = []
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    ForEach(selfTest) { check in
+                        HStack(alignment: .top, spacing: 11) {
+                            Image(systemName: check.passed ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                .foregroundStyle(check.passed ? Theme.signal : Theme.danger)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(check.name)
+                                Text(check.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.muted)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Text("Audio check")
+                } footer: {
+                    // Reads the live session rather than the source, so it
+                    // answers what is actually configured on this phone.
+                    Text("Run this with music playing and somebody talking. It catches the configuration that made audio sound thin, which is the part that can be checked automatically — whether it sounds right is still your ear.")
+                }
+
                 Section("Connection") {
                     row("LiveKit", session.state == .connected ? "Connected" : "Not connected",
                         ok: session.state == .connected)
@@ -99,7 +123,11 @@ struct DiagnosticsView: View {
                 }
             }
             .navigationTitle("Diagnostics")
-            .onAppear { UIDevice.current.isBatteryMonitoringEnabled = true }
+            .onAppear {
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            selfTest = AudioSelfTest.run()
+        }
+        .refreshable { selfTest = AudioSelfTest.run() }
         }
     }
 
@@ -152,6 +180,9 @@ struct DiagnosticsView: View {
         BLE scanning: \(session.proximity.isScanning)
         Devices seen: \(session.proximity.contacts.count)
         Battery: \(batteryLabel)
+
+        Audio check:
+        \(selfTest.map { "  \($0.passed ? "ok" : "FAIL") \($0.name): \($0.detail)" }.joined(separator: "\n"))
         """
     }
 }
