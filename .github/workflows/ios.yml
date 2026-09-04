@@ -72,6 +72,7 @@ jobs:
         env:
           APPLE_PROVISION_PROFILE: ${{ secrets.APPLE_PROVISION_PROFILE }}
           APPLE_WIDGET_PROFILE: ${{ secrets.APPLE_WIDGET_PROFILE }}
+          APPLE_WATCH_PROFILE: ${{ secrets.APPLE_WATCH_PROFILE }}
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$APPLE_PROVISION_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/squadcomms.mobileprovision
@@ -79,6 +80,8 @@ jobs:
           # profile. Without it the archive fails at the embed step rather than
           # at app signing, which is a confusing place to discover it.
           echo "$APPLE_WIDGET_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/widgets.mobileprovision
+          # Same for the watch app: its own bundle id, its own profile.
+          echo "$APPLE_WATCH_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/watch.mobileprovision
 
       - name: Generate project and write build configuration
         env:
