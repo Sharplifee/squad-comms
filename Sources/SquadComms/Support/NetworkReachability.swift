@@ -7,6 +7,22 @@ import Foundation
 /// keeps a cached flag rather than making the caller await a path update.
 /// The distinction matters: "you're offline" and "the server didn't answer"
 /// send someone to two completely different fixes.
+@MainActor
+final class ReachabilityWatcher: ObservableObject {
+    /// Published so a banner can appear the moment the network drops, rather
+    /// than only when somebody tries something and it fails.
+    @Published private(set) var isOnline = true
+
+    private let monitor = NWPathMonitor()
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in self?.isOnline = (path.status == .satisfied) }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.squadcomms.reachability.watch"))
+    }
+}
+
 enum NetworkReachability {
     private static let monitor: NWPathMonitor = {
         let monitor = NWPathMonitor()

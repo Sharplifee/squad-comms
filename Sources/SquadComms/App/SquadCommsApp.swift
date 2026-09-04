@@ -23,6 +23,11 @@ struct SquadCommsApp: App {
                     // The radar updates a picture nobody can see while
                     // backgrounded, and BLE scanning is not free.
                     session.proximity.setSuspended(phase != .active)
+                    // Permissions can be revoked in Settings while we are
+                    // backgrounded. iOS says nothing — the audio just stops
+                    // arriving, which is indistinguishable from a network
+                    // problem unless we check.
+                    if phase == .active { session.recheckMicrophonePermission() }
                 }
         }
     }

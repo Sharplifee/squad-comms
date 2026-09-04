@@ -22,6 +22,8 @@ struct LineView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     masthead
+                if !reachability.isOnline { offlineBanner }
+                if session.microphoneRevoked { micRevokedBanner }
                 ConditionBanners()
                     .padding(.horizontal, 22)
                     .padding(.bottom, 14)
@@ -81,6 +83,62 @@ struct LineView: View {
         .padding(.horizontal, 22)
         .padding(.top, 4)
         .padding(.bottom, 18)
+    }
+
+    /// Stated up front rather than discovered by tapping Open the line and
+    /// waiting ten seconds for a timeout.
+    private var offlineBanner: some View {
+        HStack(spacing: 11) {
+            Image(systemName: "wifi.slash").foregroundStyle(Theme.danger)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("No connection")
+                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                Text("You can't open or join a line until you're back online.")
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Theme.muted)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(Theme.danger.opacity(0.11),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(Theme.danger.opacity(0.28), lineWidth: 1))
+        .padding(.horizontal, 22)
+        .padding(.bottom, 16)
+    }
+
+    /// Without the microphone the app cannot do the one thing it exists for,
+    /// and the failure is silent — so it has to be stated, with the fix one
+    /// tap away.
+    private var micRevokedBanner: some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: "mic.slash.fill")
+                .foregroundStyle(Theme.danger)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Microphone is off")
+                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
+                Text("Nobody can hear you. Squadstream needs the mic to work at all.")
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Theme.muted)
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.text)
+                .padding(.top, 3)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(Theme.danger.opacity(0.11),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(Theme.danger.opacity(0.28), lineWidth: 1))
+        .padding(.horizontal, 22)
+        .padding(.bottom, 16)
     }
 
     // MARK: - Closed

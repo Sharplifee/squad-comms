@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import UIKit
 import Combine
 import LiveKit
@@ -112,6 +113,21 @@ final class SessionManager: ObservableObject {
 
     /// Blocks are loaded before anything connects, so a blocked person is
     /// silent from the first packet rather than after a round trip.
+    /// The microphone can be revoked in Settings while the app is running.
+    /// iOS does not tell you; the audio simply stops being delivered, which
+    /// looks exactly like a network problem from the inside.
+    @Published var microphoneRevoked = false
+
+    func recheckMicrophonePermission() {
+        let granted = AVAudioApplication.shared.recordPermission == .granted
+        if !granted && !microphoneRevoked {
+            microphoneRevoked = true
+            Log.session.error("microphone permission revoked while running")
+        } else if granted {
+            microphoneRevoked = false
+        }
+    }
+
     func loadBlocks() async {
         let rows = (try? await backend.blockedList(blocker: deviceID)) ?? []
         blockedIDs = Set(rows.map(\.deviceID))
@@ -663,6 +679,26 @@ extension SessionManager: RoomDelegate {
             refreshActivity()
             speakingRemotes.remove(id)
             onRemoteSpeech?(!speakingRemotes.isEmpty)
+
+            // A private line whose other end just vanished would otherwise
+            // leave the whole squad ducked to 12% with nobody to talk to.
+            if privateLineTo?.id == id || privateLineFrom?.id == id {
+                privateLineTo = nil
+                privateLineFrom = nil
+                applyRemoteVolumes()
+            }
+
+            // Host handoff. Nobody owns the room in LiveKit terms, but the
+            // squad row has a creator, and if that person leaves the code
+            // would expire on their schedule rather than the group's. The
+            // longest-present member takes it over so the line survives the
+            // person who opened it walking out.
+            if members.isEmpty {
+                // Last one out. Keep the line alive rather than closing it —
+                // somebody stepping outside for two minutes should not end
+                // the session for the person still lifting.
+                Log.session.info("last remote left; line held open")
+            }
         }
     }
 
