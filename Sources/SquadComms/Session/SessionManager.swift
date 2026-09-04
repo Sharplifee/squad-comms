@@ -586,6 +586,11 @@ extension SessionManager: RoomDelegate {
                 // The phone is in a pocket, so a haptic and anything visual
                 // both miss entirely.
                 PrivateLineTones.joined()
+                // The lock screen shows a member count. Without this it shows
+                // whatever the count was when the line opened, for the whole
+                // session — a stale readout is worse than none, because you
+                // trust it.
+                refreshActivity()
             }
         }
     }
@@ -595,6 +600,7 @@ extension SessionManager: RoomDelegate {
             guard let id = UUID(uuidString: participant.identity?.stringValue ?? "") else { return }
             members.removeAll { $0.id == id }
             PrivateLineTones.left()
+            refreshActivity()
             speakingRemotes.remove(id)
             onRemoteSpeech?(!speakingRemotes.isEmpty)
         }

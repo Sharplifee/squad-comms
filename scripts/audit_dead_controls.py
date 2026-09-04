@@ -83,6 +83,41 @@ def find_duplicate_enums() -> list[tuple[str, str, str]]:
     return clashes
 
 
+# Views that are entry points and so have no in-project reference.
+ROOT_VIEWS = {"RootView", "SquadCommsApp", "LineLiveActivity", "SquadCommsWidgetBundle"}
+
+
+def find_orphan_views() -> list[str]:
+    """SwiftUI views that exist but are never placed anywhere.
+
+    Two of these shipped in one commit — a nearby panel and a ribbon, both
+    written, both compiled, neither ever mounted, while an older inline copy
+    kept rendering. Dead UI is worse than dead settings: it looks like the
+    feature exists when you read the code.
+    """
+    declared: dict[str, Path] = {}
+    for path in swift_files():
+        for match in re.finditer(r"\bstruct\s+(\w+)\s*:\s*[^{\n]*\bView\b", path.read_text()):
+            declared[match.group(1)] = path
+
+    orphans = []
+    for name, home in declared.items():
+        if name in ROOT_VIEWS:
+            continue
+        used = False
+        for path in swift_files():
+            text = path.read_text()
+            if path == home:
+                # A view referencing only itself is still unused.
+                text = re.sub(r"\bstruct\s+" + re.escape(name) + r"\b", "", text)
+            if re.search(r"\b" + re.escape(name) + r"\s*\(", text):
+                used = True
+                break
+        if not used:
+            orphans.append(f"{name} ({home.relative_to(ROOT)})")
+    return sorted(orphans)
+
+
 def main() -> int:
     problems = 0
 
@@ -94,6 +129,14 @@ def main() -> int:
             print(f"  Preferences.{field}")
         print("  A control bound to these would move and do nothing.")
         print("  Either wire it to behaviour, or delete the field.\n")
+
+    orphans = find_orphan_views()
+    if orphans:
+        problems += len(orphans)
+        print("ORPHAN VIEWS — declared but never placed on screen:")
+        for orphan in orphans:
+            print(f"  {orphan}")
+        print("  Dead UI reads as a working feature. Mount it or delete it.\n")
 
     clashes = find_duplicate_enums()
     if clashes:
@@ -108,7 +151,7 @@ def main() -> int:
         print(f"{problems} problem(s). See scripts/audit_dead_controls.py.")
         return 1
 
-    print("No dead settings, no duplicate enums.")
+    print("No dead settings, no orphan views, no duplicate enums.")
     return 0
 
 

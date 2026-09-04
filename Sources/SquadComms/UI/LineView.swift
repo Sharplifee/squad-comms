@@ -253,6 +253,26 @@ struct LineView: View {
             volume
             codeRow
 
+            // Focus had a controller and a full-screen overlay but nothing
+            // that could start it — the entire feature was unreachable.
+            Menu {
+                ForEach(FocusModeController.durations, id: \.self) { seconds in
+                    Button("\(seconds) seconds") { focus.begin(seconds: seconds) }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "moon")
+                    Text("Focus — mute the squad briefly")
+                }
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .foregroundStyle(Theme.text)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 12)
+
             Button { showEndOptions = true } label: {
                 Text("Leave the line")
                     .font(.system(size: 15, weight: .medium, design: .rounded))

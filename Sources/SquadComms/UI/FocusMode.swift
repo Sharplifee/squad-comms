@@ -74,18 +74,3 @@ struct FocusOverlay: View {
         .transition(.opacity)
     }
 }
-
-/// The trigger, as a menu so a duration is one tap rather than a sheet.
-struct FocusButton: View {
-    @ObservedObject var focus: FocusModeController
-
-    var body: some View {
-        Menu {
-            ForEach(FocusModeController.durations, id: \.self) { seconds in
-                Button("\(seconds) seconds") { focus.begin(seconds: seconds) }
-            }
-        } label: {
-            Label("Focus", systemImage: "moon")
-        }
-    }
-}

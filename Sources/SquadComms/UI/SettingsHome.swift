@@ -172,6 +172,16 @@ struct SettingsHome: View {
     }
 
     private var safetySection: some View {
+            Section {
+                NavigationLink { ContactsView(backend: session.backend) } label: {
+                    Label("Find your contacts", systemImage: "person.crop.circle.badge.plus")
+                }
+            } header: {
+                Text("Squad")
+            } footer: {
+                Text("See which of your contacts already have the app. Numbers are scrambled on your phone before anything is sent.")
+            }
+
         Section {
             NavigationLink { BlockedListView() } label: {
                 Label("Blocked", systemImage: "hand.raised")

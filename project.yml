@@ -34,7 +34,7 @@ targets:
       properties:
         CFBundleDisplayName: squad comms
         CFBundleShortVersionString: "1.2"
-        CFBundleVersion: "3"
+        CFBundleVersion: "4"
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: squad comms uses your microphone so your squad hears you without touching your phone.
