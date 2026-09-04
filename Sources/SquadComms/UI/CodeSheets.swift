@@ -46,9 +46,19 @@ struct StartLineSheet: View {
     @EnvironmentObject private var session: SessionManager
     @Environment(\.dismiss) private var dismiss
     @State private var code = ""
+    @State private var name = ""
     @State private var working = false
 
     private let maximum = 8
+
+    /// Every squad used to be "<your name>'s squad", which tells you nothing
+    /// once you have three saved. Naming it is optional — the code alone is
+    /// enough for a one-off — but a name is what makes a saved squad
+    /// recognisable later.
+    private var resolvedName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? "Squad \(code)" : trimmed
+    }
 
     var body: some View {
         NavigationStack {
@@ -67,6 +77,17 @@ struct StartLineSheet: View {
                 CodeBoxes(code: code, slots: max(3, min(code.count + 1, maximum)))
                     .padding(.vertical, 22)
 
+                TextField("Name it (optional)", text: $name)
+                    .textInputAutocapitalization(.words)
+                    .font(.system(.subheadline, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(Theme.surface,
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 16)
+
                 CodeKeypad(code: $code, maximum: maximum)
                     .padding(.horizontal, 40)
 
@@ -75,8 +96,7 @@ struct StartLineSheet: View {
                 Button {
                     working = true
                     Task {
-                        await session.create(name: "\(PreferencesStore.shared.current.displayName)'s squad",
-                                             code: code)
+                        await session.create(name: resolvedName, code: code)
                         working = false
                         dismiss()
                     }

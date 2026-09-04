@@ -18,6 +18,8 @@ struct LineView: View {
     @State private var showStart = false
     @State private var showJoin = false
     @State private var showEndOptions = false
+    @State private var renaming: SavedSquad?
+    @State private var newName = ""
 
     var body: some View {
         NavigationStack {
@@ -39,6 +41,17 @@ struct LineView: View {
         .onDisappear { AppConditions.shared.stopWatching() }
             .navigationBarHidden(true)
             .sheet(isPresented: $showStart) { StartLineSheet() }
+            .alert("Rename squad", isPresented: Binding(
+                get: { renaming != nil },
+                set: { if !$0 { renaming = nil } }
+            )) {
+                TextField("Name", text: $newName)
+                Button("Save") {
+                    if let squad = renaming { saved.rename(squad, to: newName) }
+                    renaming = nil
+                }
+                Button("Cancel", role: .cancel) { renaming = nil }
+            }
             .sheet(isPresented: $showJoin) { SwitchSquadSheet() }
             .confirmationDialog("End this session?", isPresented: $showEndOptions,
                                 titleVisibility: .visible) {
@@ -226,6 +239,19 @@ struct LineView: View {
                     }
                     .padding(.horizontal, 18)
                     .padding(.vertical, 13)
+                }
+                // Rename and remove live in a context menu rather than swipe
+                // actions, because this is a plain stack rather than a List.
+                .contextMenu {
+                    Button {
+                        renaming = squad
+                        newName = squad.name
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) { saved.forget(squad) } label: {
+                        Label("Remove", systemImage: "trash")
+                    }
                 }
                 if squad.id != saved.squads.last?.id { Divider().overlay(Theme.line) }
             }

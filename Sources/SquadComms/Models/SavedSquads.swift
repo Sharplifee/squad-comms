@@ -35,6 +35,10 @@ final class SavedSquadStore: ObservableObject {
     private init() { load() }
 
     func remember(code: String, name: String, members: [String]) {
+        // A name you typed outranks the one the session reports. Without this,
+        // reconnecting silently reverts every rename.
+        let existingName = squads.first { $0.code == code }?.name
+        let name = existingName ?? name
         var next = squads.filter { $0.code != code }
         next.insert(SavedSquad(code: code, name: name,
                                lastOpened: Date(), lastMembers: members), at: 0)
