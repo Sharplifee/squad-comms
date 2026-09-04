@@ -34,7 +34,7 @@ targets:
       properties:
         CFBundleDisplayName: squad comms
         CFBundleShortVersionString: "1.2"
-        CFBundleVersion: "2"
+        CFBundleVersion: "3"
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: squad comms uses your microphone so your squad hears you without touching your phone.
@@ -94,9 +94,17 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.connor.openline.widgets
-        CODE_SIGN_STYLE: Manual
         DEVELOPMENT_TEAM: XF783932R2
         PROVISIONING_PROFILE_SPECIFIER: SquadComms Widgets CI
+        # Without an explicit identity the extension falls back to
+        # "iOS Development" regardless of CODE_SIGN_STYLE, and fails looking
+        # for a development cert that deliberately does not exist here.
+        CODE_SIGN_IDENTITY: Apple Distribution
+        CODE_SIGN_STYLE: Manual
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "2"
         SKIP_INSTALL: YES
     dependencies:
       - sdk: WidgetKit.framework
