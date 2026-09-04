@@ -110,9 +110,34 @@ final class SessionManager: ObservableObject {
         blockedIDs = Set(rows.map(\.deviceID))
     }
 
+    /// Quietly rejoin the last line, if it is still there.
+    ///
+    /// This runs at launch, so it must NEVER produce a blocking screen. It
+    /// previously called join() directly, which sets .failed on any problem —
+    /// so an expired code, a flaky network or a stale saved squad greeted you
+    /// with a full-screen error before you had asked for anything. Worse, each
+    /// launch counted as a failed attempt, and enough of them locked the owner
+    /// out of their own squad.
+    ///
+    /// Opening the app is not a request to connect. If the old line is gone,
+    /// the dashboard is the correct outcome.
     func restoreLastSession() async {
-        guard let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode") else { return }
-        await join(code: code)
+        guard let code = UserDefaults.standard.string(forKey: "squadcomms.lastCode"),
+              !code.isEmpty else { return }
+
+        do {
+            let result = try await withTimeout(Self.connectTimeout) {
+                try await self.backend.joinSquad(code: code, deviceID: self.deviceID)
+            }
+            guard result.outcome == "ok", let squad = result.squad else {
+                // Nothing to rejoin. Land on the dashboard, say nothing.
+                state = .idle
+                return
+            }
+            try await connect(to: squad)
+        } catch {
+            state = .idle
+        }
     }
 
     /// A stable per-install identifier for rate limiting.
@@ -161,8 +186,17 @@ final class SessionManager: ObservableObject {
                 guard let squad = result.squad else { throw SessionError.timedOut }
                 try await connect(to: squad)
             case "rate_limited":
-                let wait = result.retryAfter ?? 60
-                state = .failed("Too many attempts. Try again in \(wait / 60 > 0 ? "\(wait / 60) min" : "\(wait)s").")
+                // Never a wall. This exists to slow somebody sweeping the code
+                // space, and it has no business being the first thing the
+                // owner of a squad sees. Wait it out and retry once, silently.
+                let wait = min(result.retryAfter ?? 5, 10)
+                try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
+                let retry = try await self.backend.joinSquad(code: code, deviceID: self.deviceID)
+                if retry.outcome == "ok", let squad = retry.squad {
+                    try await connect(to: squad)
+                } else {
+                    state = .idle
+                }
             case "not_found":
                 state = .failed("No line open on that code.")
             case "expired":
