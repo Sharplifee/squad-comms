@@ -14,7 +14,6 @@ struct LineView: View {
     @StateObject private var saved = SavedSquadStore.shared
     /// Watched rather than polled, so the banner appears the moment the
     /// network drops instead of when something fails.
-    @StateObject private var reachability = ReachabilityWatcher()
 
     @State private var showStart = false
     @State private var showJoin = false
@@ -25,10 +24,11 @@ struct LineView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     masthead
-                    banners
-                if !reachability.isOnline { offlineBanner }
-                if session.microphoneRevoked { micRevokedBanner }
-                ConditionBanners()
+                    // One banner system. AppConditions already watches the
+                    // network, the microphone and Bluetooth together, so the
+                    // two hand-rolled banners above it were saying the same
+                    // things from a second source of truth.
+                    ConditionBanners()
                     .padding(.horizontal, 22)
                     .padding(.bottom, 14)
                     if session.squad == nil { closed } else { open }
@@ -60,60 +60,6 @@ struct LineView: View {
         .task(id: session.squad?.id) {
             if session.squad != nil { await audio.startListening() } else { audio.stopListening() }
         }
-    }
-
-    /// Things that stop the app working, said plainly, with the way out.
-    @ViewBuilder
-    private var banners: some View {
-        VStack(spacing: 10) {
-            if audio.micRevoked {
-                banner(icon: "mic.slash.fill",
-                       title: "Microphone turned off",
-                       detail: "Nobody can hear you. Squadstream needs the mic to work at all.",
-                       action: "Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-            }
-            if !NetworkReachability.isOnline {
-                banner(icon: "wifi.slash",
-                       title: "No connection",
-                       detail: "You can't open or join a line until you're back online.",
-                       action: nil, handler: nil)
-            }
-        }
-        .padding(.horizontal, 22)
-        .padding(.bottom, banners_isEmpty ? 0 : 16)
-    }
-
-    private var banners_isEmpty: Bool {
-        !audio.micRevoked && NetworkReachability.isOnline
-    }
-
-    private func banner(icon: String, title: String, detail: String,
-                        action: String?, handler: (() -> Void)?) -> some View {
-        HStack(alignment: .top, spacing: 11) {
-            Image(systemName: icon).foregroundStyle(Theme.danger)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(.footnote, design: .rounded, weight: .semibold))
-                Text(detail)
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(Theme.textDim)
-                if let action, let handler {
-                    Button(action, action: handler)
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .padding(.top, 3)
-                }
-            }
-            Spacer()
-        }
-        .padding(14)
-        .background(Theme.danger.opacity(0.10),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Theme.danger.opacity(0.28)))
     }
 
     // MARK: - Masthead
@@ -151,60 +97,9 @@ struct LineView: View {
 
     /// Stated up front rather than discovered by tapping Open the line and
     /// waiting ten seconds for a timeout.
-    private var offlineBanner: some View {
-        HStack(spacing: 11) {
-            Image(systemName: "wifi.slash").foregroundStyle(Theme.danger)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("No connection")
-                    .font(.system(.footnote, design: .rounded, weight: .semibold))
-                Text("You can't open or join a line until you're back online.")
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(Theme.muted)
-            }
-            Spacer()
-        }
-        .padding(14)
-        .background(Theme.danger.opacity(0.11),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .strokeBorder(Theme.danger.opacity(0.28), lineWidth: 1))
-        .padding(.horizontal, 22)
-        .padding(.bottom, 16)
-    }
-
     /// Without the microphone the app cannot do the one thing it exists for,
     /// and the failure is silent — so it has to be stated, with the fix one
     /// tap away.
-    private var micRevokedBanner: some View {
-        HStack(alignment: .top, spacing: 11) {
-            Image(systemName: "mic.slash.fill")
-                .foregroundStyle(Theme.danger)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Microphone is off")
-                    .font(.system(.footnote, design: .rounded, weight: .semibold))
-                Text("Nobody can hear you. Squadstream needs the mic to work at all.")
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(Theme.muted)
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(Theme.text)
-                .padding(.top, 3)
-            }
-            Spacer()
-        }
-        .padding(14)
-        .background(Theme.danger.opacity(0.11),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .strokeBorder(Theme.danger.opacity(0.28), lineWidth: 1))
-        .padding(.horizontal, 22)
-        .padding(.bottom, 16)
-    }
-
     // MARK: - Closed
 
     private var closed: some View {
