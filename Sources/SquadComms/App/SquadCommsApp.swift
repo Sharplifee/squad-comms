@@ -3,6 +3,9 @@ import UIKit
 
 @main
 struct SquadCommsApp: App {
+    init() {
+        EventLog.configure(url: "https://cqhugvirbxrxqhhbwklc.supabase.co", apiKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxaHVndmlyYnhyeHFoaGJ3a2xjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MDcyMDAsImV4cCI6MjA5NTI4MzIwMH0.zZP0CvBoqYSBOc99NWHcJ87b_nOdYQ0g9WBMd8ssC9o", project: "squad-comms")   // append-only event log (public.event_log)
+    }
     @Environment(\.scenePhase) private var scenePhase
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var session = SessionManager()
